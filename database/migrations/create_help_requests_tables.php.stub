@@ -1,0 +1,54 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+use Joelseneque\HelpRequests\HelpRequests;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $usersTable = (new (HelpRequests::userModel()))->getTable();
+
+        Schema::create('help_requests', function (Blueprint $table) use ($usersTable): void {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained($usersTable)->nullOnDelete();
+            $table->string('page_url')->nullable();
+            $table->string('page_title')->nullable();
+            $table->text('comment');
+            $table->string('screenshot_path')->nullable();
+            $table->string('status')->default('open')->index();
+            $table->timestamp('resolved_at')->nullable();
+
+            // The repository is stored beside the issue number because the
+            // configured repository can change, and an inbound webhook must only
+            // match its own repository.
+            $table->unsignedBigInteger('github_issue_number')->nullable()->index();
+            $table->string('github_repository')->nullable();
+            $table->string('github_issue_url')->nullable();
+            $table->string('github_issue_state')->nullable();
+            $table->timestamp('github_synced_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('help_request_replies', function (Blueprint $table) use ($usersTable): void {
+            $table->id();
+            $table->foreignId('help_request_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->nullable()->constrained($usersTable)->nullOnDelete();
+            $table->text('body');
+            $table->string('screenshot_path')->nullable();
+
+            // Unique so a redelivered webhook can never create the same reply twice.
+            $table->unsignedBigInteger('github_comment_id')->nullable()->unique();
+            $table->string('github_author')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('help_request_replies');
+        Schema::dropIfExists('help_requests');
+    }
+};

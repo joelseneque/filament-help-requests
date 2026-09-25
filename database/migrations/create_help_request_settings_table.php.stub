@@ -1,0 +1,35 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * A singleton row holding the per-database GitHub connection. Credentials
+     * for the GitHub App itself live in the environment, not here.
+     */
+    public function up(): void
+    {
+        Schema::create('help_request_settings', function (Blueprint $table): void {
+            $table->id();
+            $table->boolean('github_enabled')->default(false);
+            $table->string('github_repository')->nullable();
+            $table->unsignedBigInteger('github_installation_id')->nullable();
+            $table->string('github_account_login')->nullable();
+            $table->text('github_installation_token')->nullable();
+            $table->timestamp('github_installation_token_expires_at')->nullable();
+            $table->timestamp('github_installation_failed_at')->nullable();
+            $table->json('github_default_labels')->nullable();
+            $table->boolean('github_auto_create')->default(false);
+            $table->timestamp('github_last_synced_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('help_request_settings');
+    }
+};
