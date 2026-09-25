@@ -49,7 +49,11 @@ class HelpRequestsPlugin implements Plugin
 
     public function register(Panel $panel): void
     {
-        HelpRequests::usePanel($panel->getId());
+        // Links in emails, jobs and the webhook point at the panel that holds
+        // the admin pages, so with several panels only that one is recorded.
+        if ($this->hasResource) {
+            HelpRequests::usePanel($panel->getId());
+        }
 
         $panel
             ->resources($this->hasResource ? [HelpRequestResource::class] : [])

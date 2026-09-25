@@ -4,7 +4,7 @@
  | Import this ONCE from your Filament panel theme's CSS (after the Filament
  | theme import), e.g.:
  |
- |   @import '../../../../vendor/joelseneque/help-requests/resources/css/plugin.css';
+ |   @import '../../../../vendor/joelseneque/filament-help-requests/resources/css/plugin.css';
  |
  | The floating widget uses utilities Filament's own stylesheet does not ship
  | (arbitrary widths, `file:` variants, positioning), so without this import the

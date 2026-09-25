@@ -1,5 +1,5 @@
 {
-    "name": "joelseneque/help-requests",
+    "name": "joelseneque/filament-help-requests",
     "description": "A Filament v5 help desk: a floating in-app help widget, an admin triage resource, email + database notifications, and optional two-way GitHub issue sync via a GitHub App.",
     "keywords": [
         "filament",
@@ -9,7 +9,7 @@
         "support",
         "github"
     ],
-    "homepage": "https://github.com/joelseneque/help-requests",
+    "homepage": "https://github.com/joelseneque/filament-help-requests",
     "license": "MIT",
     "authors": [
         {
