@@ -4,10 +4,12 @@ A drop-in help desk for Filament v5 panels.
 
 - **Floating help button** on every panel page. Users pick what kind of
   feedback it is ("Looks broken", "Confusing", …), describe it, and can attach
-  a screenshot and a Loom video. The page they were on is captured
-  automatically.
-- **"My Requests" tab** in the same widget, where users read replies and reply
-  back.
+  screenshots (up to 5) and a Loom video. Screenshots can be pasted or dropped
+  in, then marked with numbered pins ("mark where it goes wrong"); the pins are
+  drawn onto the image and each pin's note is added to the request text. The page
+  they were on is captured automatically.
+- **"My Requests" tab** in the same widget: a collapsible list of their requests
+  (one thread open at a time) where they read replies and reply back.
 - **Admin triage** — a resource to list, filter, reply (with screenshots),
   change status and delete requests.
 - **Notifications** — email + in-app to admins on new requests and replies;
@@ -190,7 +192,7 @@ from other hosts are shown as a plain link rather than an embedded player.
 | `admin_role` | `super_admin` | Role used by the default manage check and for in-app admin alerts. |
 | `notifications.channels` | `['database', 'mail']` | Channels used for requester notifications. |
 | `video.*` | see above | Loom link options. |
-| `storage.*` | `public`, `help-requests`, 5120 KB | Screenshot disk, directory and max size. |
+| `storage.*` | `public`, `help-requests`, 5120 KB, 5 files | Screenshot disk, directory, max size per file and max screenshots per request or reply. |
 | `branding.name` / `branding.logo_url` | `APP_NAME` / none | Shown in emails and GitHub issue text. |
 | `routes.*` | `webhooks/github`, `github/connect`, `github/callback` | Route paths and install-route middleware. |
 | `github.*` | `GITHUB_APP_*` env vars | GitHub App credentials; `schedule_sync` toggles the hourly poll. |

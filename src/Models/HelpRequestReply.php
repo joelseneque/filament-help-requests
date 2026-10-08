@@ -5,9 +5,9 @@ namespace Joelseneque\HelpRequests\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 use Joelseneque\HelpRequests\Database\Factories\HelpRequestReplyFactory;
 use Joelseneque\HelpRequests\HelpRequests;
+use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
 
 /**
  * @property int $id
@@ -15,6 +15,7 @@ use Joelseneque\HelpRequests\HelpRequests;
  * @property int|null $user_id
  * @property string $body
  * @property string|null $screenshot_path
+ * @property list<string>|null $screenshot_paths
  * @property int|null $github_comment_id
  * @property string|null $github_author
  */
@@ -23,11 +24,14 @@ class HelpRequestReply extends Model
     /** @use HasFactory<HelpRequestReplyFactory> */
     use HasFactory;
 
+    use HasScreenshots;
+
     protected $fillable = [
         'help_request_id',
         'user_id',
         'body',
         'screenshot_path',
+        'screenshot_paths',
         'github_comment_id',
         'github_author',
     ];
@@ -39,26 +43,13 @@ class HelpRequestReply extends Model
     {
         return [
             'github_comment_id' => 'integer',
+            'screenshot_paths' => 'array',
         ];
     }
 
     protected static function newFactory(): HelpRequestReplyFactory
     {
         return HelpRequestReplyFactory::new();
-    }
-
-    public function hasScreenshot(): bool
-    {
-        return $this->screenshot_path !== null;
-    }
-
-    public function getScreenshotUrl(): ?string
-    {
-        if ($this->screenshot_path === null) {
-            return null;
-        }
-
-        return Storage::disk(config('help-requests.storage.disk'))->url($this->screenshot_path);
     }
 
     /**

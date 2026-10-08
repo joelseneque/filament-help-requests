@@ -69,11 +69,13 @@ class ViewHelpRequest extends ViewRecord
                             ->view('help-requests::components.video-embed')
                             ->columnSpanFull()
                             ->visible(fn (HelpRequest $record): bool => $record->hasVideo()),
-                        ImageEntry::make('screenshot_path')
-                            ->label('Screenshot')
+                        ImageEntry::make('screenshots')
+                            ->label('Screenshots')
+                            ->state(fn (HelpRequest $record): array => $record->screenshotPaths())
                             ->disk(config('help-requests.storage.disk'))
+                            ->imageHeight(240)
                             ->columnSpanFull()
-                            ->visible(fn (HelpRequest $record): bool => $record->screenshot_path !== null),
+                            ->visible(fn (HelpRequest $record): bool => $record->hasScreenshot()),
                     ])
                     ->columns(2)
                     ->columnSpanFull(),
@@ -120,9 +122,11 @@ class ViewHelpRequest extends ViewRecord
                                 TextEntry::make('body')
                                     ->label('')
                                     ->columnSpanFull(),
-                                ImageEntry::make('screenshot_path')
+                                ImageEntry::make('screenshots')
                                     ->label('')
+                                    ->state(fn (HelpRequestReply $record): array => $record->screenshotPaths())
                                     ->disk(config('help-requests.storage.disk'))
+                                    ->imageHeight(160)
                                     ->columnSpanFull()
                                     ->visible(fn (HelpRequestReply $record): bool => $record->hasScreenshot()),
                             ])
@@ -150,7 +154,7 @@ class ViewHelpRequest extends ViewRecord
                         ->required(),
                 ])
                 ->action(function (array $data, HelpRequest $record): void {
-                    $reply = $this->recordReply($record, $data['body'], $data['screenshot_path'] ?? null);
+                    $reply = $this->recordReply($record, $data['body'], $data['screenshot_paths'] ?? []);
 
                     $notifiedResolution = $this->applyStatus(
                         $record,
@@ -192,7 +196,7 @@ class ViewHelpRequest extends ViewRecord
                 ])
                 ->action(function (array $data, HelpRequest $record): void {
                     $comment = filled($data['comment'] ?? null)
-                        ? $this->recordReply($record, $data['comment'], $data['screenshot_path'] ?? null)
+                        ? $this->recordReply($record, $data['comment'], $data['screenshot_paths'] ?? [])
                         : null;
 
                     $notifiedResolution = $this->applyStatus(
@@ -252,14 +256,16 @@ class ViewHelpRequest extends ViewRecord
     }
 
     /**
-     * The optional screenshot that can be attached to a reply, stored beside the
-     * screenshots uploaded with the original request.
+     * The optional screenshots that can be attached to a reply, stored beside
+     * the screenshots uploaded with the original request.
      */
     protected static function screenshotUpload(): FileUpload
     {
-        return FileUpload::make('screenshot_path')
-            ->label('Screenshot')
+        return FileUpload::make('screenshot_paths')
+            ->label('Screenshots')
             ->image()
+            ->multiple()
+            ->maxFiles(config('help-requests.storage.max_files', 5))
             ->disk(config('help-requests.storage.disk'))
             ->directory(config('help-requests.storage.directory'))
             ->visibility('public')
@@ -269,13 +275,15 @@ class ViewHelpRequest extends ViewRecord
 
     /**
      * Record a reply and mirror it onto the linked GitHub issue.
+     *
+     * @param  list<string>  $screenshotPaths
      */
-    protected function recordReply(HelpRequest $record, string $body, ?string $screenshotPath = null): HelpRequestReply
+    protected function recordReply(HelpRequest $record, string $body, array $screenshotPaths = []): HelpRequestReply
     {
         $reply = $record->replies()->create([
             'user_id' => auth()->id(),
             'body' => $body,
-            'screenshot_path' => $screenshotPath,
+            'screenshot_paths' => array_values($screenshotPaths) ?: null,
         ]);
 
         if ($record->hasGithubIssue()) {

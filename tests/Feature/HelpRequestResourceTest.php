@@ -85,17 +85,18 @@ it('lets an admin attach a screenshot to their reply', function () {
     Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
         ->callAction(TestAction::make('reply'), [
             'body' => 'This is the screen you should be seeing.',
-            'screenshot_path' => UploadedFile::fake()->image('fixed.png'),
+            'screenshot_paths' => [UploadedFile::fake()->image('fixed.png'), UploadedFile::fake()->image('also.png')],
             'status' => HelpRequestStatus::InProgress->value,
         ])
         ->assertHasNoActionErrors();
 
     $reply = $request->replies()->firstOrFail();
 
-    expect($reply->screenshot_path)->not->toBeNull()
-        ->and($reply->hasScreenshot())->toBeTrue();
+    expect($reply->screenshotPaths())->toHaveCount(2);
 
-    Storage::disk('public')->assertExists($reply->screenshot_path);
+    foreach ($reply->screenshotPaths() as $path) {
+        Storage::disk('public')->assertExists($path);
+    }
 });
 
 it('renders an attached reply screenshot in the conversation', function () {
@@ -136,7 +137,7 @@ it('leaves the reply screenshot empty when none is attached', function () {
         ])
         ->assertHasNoActionErrors();
 
-    expect($request->replies()->firstOrFail()->screenshot_path)->toBeNull();
+    expect($request->replies()->firstOrFail()->hasScreenshot())->toBeFalse();
 });
 
 it('emails the reply on its own when the status is not being finished', function () {

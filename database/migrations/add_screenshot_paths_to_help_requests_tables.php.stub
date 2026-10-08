@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Several screenshots per request or reply. `screenshot_path` stays so rows
+     * written before this migration keep their single screenshot.
+     */
+    public function up(): void
+    {
+        foreach (['help_requests', 'help_request_replies'] as $table) {
+            Schema::table($table, function (Blueprint $table): void {
+                $table->json('screenshot_paths')->nullable()->after('screenshot_path');
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        foreach (['help_requests', 'help_request_replies'] as $table) {
+            Schema::table($table, function (Blueprint $table): void {
+                $table->dropColumn('screenshot_paths');
+            });
+        }
+    }
+};

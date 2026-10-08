@@ -370,7 +370,7 @@ class GitHubIssueService
 
         $body = "**{$author}** replied in {$appName}:\n\n{$reply->body}";
 
-        if ($screenshot = $reply->getScreenshotUrl()) {
+        foreach ($reply->screenshotUrls() as $screenshot) {
             $body .= "\n\n![Screenshot]({$screenshot})";
         }
 
@@ -472,7 +472,7 @@ class GitHubIssueService
             $lines[] = '**Video:** '.$helpRequest->video_url;
         }
 
-        if ($screenshot = $helpRequest->getScreenshotUrl()) {
+        foreach ($helpRequest->screenshotUrls() as $screenshot) {
             $lines[] = '';
             $lines[] = "![Screenshot]({$screenshot})";
         }

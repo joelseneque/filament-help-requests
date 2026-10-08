@@ -80,6 +80,8 @@ return [
         'disk' => 'public',
         'directory' => 'help-requests',
         'max_size_kb' => 5120,
+        // Screenshots per request or reply.
+        'max_files' => 5,
     ],
 
     /*
