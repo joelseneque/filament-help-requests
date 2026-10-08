@@ -352,7 +352,7 @@ Follow these steps in each app that uses the package.
 
 ### Version notes
 
-**Unreleased**
+**1.1.0**
 
 - New migration `add_screenshot_paths_to_help_requests_tables` (step 2).
 - New config key `storage.max_files` (default `5`) — add it to a published
