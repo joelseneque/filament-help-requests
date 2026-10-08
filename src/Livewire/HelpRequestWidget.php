@@ -35,7 +35,13 @@ class HelpRequestWidget extends Component
 
     public string $comment = '';
 
-    public ?TemporaryUploadedFile $screenshot = null;
+    /**
+     * Screenshots keyed by slot. A removed one is set to null rather than
+     * unset, so slots never shift away from their notes in $screenshotNotes.
+     *
+     * @var array<int, TemporaryUploadedFile|null>
+     */
+    public array $screenshots = [];
 
     public string $pageUrl = '';
 
@@ -65,11 +71,28 @@ class HelpRequestWidget extends Component
     public array $replyBody = [];
 
     /**
-     * Optional reply screenshot keyed by help request id, matching $replyBody.
+     * Reply screenshots keyed by help request id, then slot, matching $replyBody.
      *
-     * @var array<int, TemporaryUploadedFile|null>
+     * @var array<int, array<int, TemporaryUploadedFile|null>>
      */
-    public array $replyScreenshot = [];
+    public array $replyScreenshots = [];
+
+    /**
+     * Notes for the numbered markers drawn on each screenshot, keyed by the
+     * screenshot's slot, in marker order. The markers themselves are burned
+     * into the image in the browser; the notes are appended to the comment so
+     * they reach every channel.
+     *
+     * @var array<int, array<int, string|null>>
+     */
+    public array $screenshotNotes = [];
+
+    /**
+     * Marker notes keyed by help request id, matching $replyScreenshots.
+     *
+     * @var array<int, array<int, array<int, string|null>>>
+     */
+    public array $replyScreenshotNotes = [];
 
     /**
      * @return array<string, mixed>
@@ -78,7 +101,7 @@ class HelpRequestWidget extends Component
     {
         $rules = [
             'comment' => ['required', 'string', 'min:3', 'max:5000'],
-            'screenshot' => ['nullable', 'image', 'max:'.config('help-requests.storage.max_size_kb')],
+            ...$this->screenshotRules('screenshots', 'screenshotNotes'),
             'category' => ['nullable', 'string', Rule::in(array_keys(HelpRequests::categories()))],
             'videoUrl' => [
                 'nullable',
@@ -97,6 +120,20 @@ class HelpRequestWidget extends Component
         }
 
         return $rules;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function screenshotRules(string $files, string $notes): array
+    {
+        return [
+            $files => ['nullable', 'array', 'max:'.config('help-requests.storage.max_files', 5)],
+            "{$files}.*" => ['nullable', 'image', 'max:'.config('help-requests.storage.max_size_kb')],
+            $notes => ['nullable', 'array'],
+            "{$notes}.*" => ['nullable', 'array', 'max:20'],
+            "{$notes}.*.*" => ['nullable', 'string', 'max:500'],
+        ];
     }
 
     /**
@@ -150,6 +187,9 @@ class HelpRequestWidget extends Component
 
     public function submit(): void
     {
+        // Removed screenshots are nulls; drop them so the count rule sees real ones.
+        $this->screenshots = array_filter($this->screenshots);
+
         $this->validate();
 
         $helpRequest = HelpRequest::create([
@@ -158,8 +198,8 @@ class HelpRequestWidget extends Component
             'page_title' => $this->pageTitle !== '' ? $this->pageTitle : null,
             'category' => $this->category !== '' ? $this->category : null,
             'video_url' => HelpRequests::videoLinksEnabled() && trim($this->videoUrl) !== '' ? trim($this->videoUrl) : null,
-            'comment' => $this->comment,
-            'screenshot_path' => $this->storeUpload($this->screenshot),
+            'comment' => $this->withMarkerNotes($this->comment, $this->screenshots, $this->screenshotNotes),
+            'screenshot_paths' => $this->storeUploads($this->screenshots),
             'status' => HelpRequestStatus::Open,
         ]);
 
@@ -169,7 +209,7 @@ class HelpRequestWidget extends Component
             CreateGitHubIssueForHelpRequest::dispatch($helpRequest);
         }
 
-        $this->reset('comment', 'screenshot', 'category', 'videoUrl');
+        $this->reset('comment', 'screenshots', 'screenshotNotes', 'category', 'videoUrl');
         $this->tab = 'mine';
 
         unset($this->myRequests);
@@ -187,21 +227,30 @@ class HelpRequestWidget extends Component
             ->where('user_id', auth()->id())
             ->findOrFail($helpRequestId);
 
+        $this->replyScreenshots[$helpRequestId] = array_filter($this->replyScreenshots[$helpRequestId] ?? []);
+
         $this->validate(
             [
                 "replyBody.{$helpRequestId}" => ['required', 'string', 'min:1', 'max:5000'],
-                "replyScreenshot.{$helpRequestId}" => ['nullable', 'image', 'max:'.config('help-requests.storage.max_size_kb')],
+                ...$this->screenshotRules("replyScreenshots.{$helpRequestId}", "replyScreenshotNotes.{$helpRequestId}"),
             ],
             attributes: [
                 "replyBody.{$helpRequestId}" => 'reply',
-                "replyScreenshot.{$helpRequestId}" => 'screenshot',
+                "replyScreenshots.{$helpRequestId}" => 'screenshots',
+                "replyScreenshots.{$helpRequestId}.*" => 'screenshot',
             ],
         );
 
+        $screenshots = $this->replyScreenshots[$helpRequestId];
+
         $reply = $helpRequest->replies()->create([
             'user_id' => auth()->id(),
-            'body' => trim($this->replyBody[$helpRequestId]),
-            'screenshot_path' => $this->storeUpload($this->replyScreenshot[$helpRequestId] ?? null),
+            'body' => $this->withMarkerNotes(
+                trim($this->replyBody[$helpRequestId]),
+                $screenshots,
+                $this->replyScreenshotNotes[$helpRequestId] ?? [],
+            ),
+            'screenshot_paths' => $this->storeUploads($screenshots),
         ]);
 
         if ($helpRequest->hasGithubIssue()) {
@@ -210,7 +259,7 @@ class HelpRequestWidget extends Component
 
         HelpRequestNotifier::userReplyForAdmins($helpRequest, $reply);
 
-        unset($this->replyBody[$helpRequestId], $this->replyScreenshot[$helpRequestId]);
+        unset($this->replyBody[$helpRequestId], $this->replyScreenshots[$helpRequestId], $this->replyScreenshotNotes[$helpRequestId]);
         unset($this->myRequests);
 
         Notification::make()
@@ -219,12 +268,54 @@ class HelpRequestWidget extends Component
             ->send();
     }
 
-    protected function storeUpload(?TemporaryUploadedFile $file): ?string
+    /**
+     * Notes keep their marker's number, so a blank note in the middle does not
+     * shift the numbers away from the dots burned into the image. Screenshots
+     * are numbered in the order they are stored, and only when there are
+     * several. Notes for a removed screenshot are dropped with it.
+     *
+     * @param  array<int, TemporaryUploadedFile|null>  $screenshots
+     * @param  array<int, array<int, string|null>>  $notes
+     */
+    protected function withMarkerNotes(string $text, array $screenshots, array $notes): string
     {
-        return $file?->store(
-            config('help-requests.storage.directory'),
-            config('help-requests.storage.disk'),
-        ) ?: null;
+        $screenshots = array_filter($screenshots);
+        $number = 0;
+
+        foreach (array_keys($screenshots) as $slot) {
+            $number++;
+            $lines = [];
+
+            foreach (array_values($notes[$slot] ?? []) as $index => $note) {
+                if (trim((string) $note) !== '') {
+                    $lines[] = ($index + 1).'. '.trim($note);
+                }
+            }
+
+            if ($lines !== []) {
+                $label = count($screenshots) > 1 ? "Marked on screenshot {$number}:" : 'Marked on screenshot:';
+                $text .= "\n\n{$label}\n".implode("\n", $lines);
+            }
+        }
+
+        return $text;
+    }
+
+    /**
+     * @param  array<int, TemporaryUploadedFile|null>  $files
+     * @return list<string>|null
+     */
+    protected function storeUploads(array $files): ?array
+    {
+        $paths = array_values(array_filter(array_map(
+            fn (TemporaryUploadedFile $file): string|false => $file->store(
+                config('help-requests.storage.directory'),
+                config('help-requests.storage.disk'),
+            ),
+            array_filter($files),
+        )));
+
+        return $paths === [] ? null : $paths;
     }
 
     /**

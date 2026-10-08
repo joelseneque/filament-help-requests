@@ -7,10 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
 use Joelseneque\HelpRequests\Database\Factories\HelpRequestFactory;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
+use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
 
 /**
  * @property int $id
@@ -20,6 +20,7 @@ use Joelseneque\HelpRequests\HelpRequests;
  * @property string|null $category
  * @property string $comment
  * @property string|null $screenshot_path
+ * @property list<string>|null $screenshot_paths
  * @property string|null $video_url
  * @property HelpRequestStatus $status
  * @property Carbon|null $resolved_at
@@ -34,6 +35,8 @@ class HelpRequest extends Model
     /** @use HasFactory<HelpRequestFactory> */
     use HasFactory;
 
+    use HasScreenshots;
+
     protected $fillable = [
         'user_id',
         'page_url',
@@ -41,6 +44,7 @@ class HelpRequest extends Model
         'category',
         'comment',
         'screenshot_path',
+        'screenshot_paths',
         'video_url',
         'status',
         'resolved_at',
@@ -58,6 +62,7 @@ class HelpRequest extends Model
     {
         return [
             'status' => HelpRequestStatus::class,
+            'screenshot_paths' => 'array',
             'resolved_at' => 'datetime',
             'github_issue_number' => 'integer',
             'github_synced_at' => 'datetime',
@@ -116,14 +121,5 @@ class HelpRequest extends Model
     public function hasGithubIssue(): bool
     {
         return $this->github_issue_number !== null;
-    }
-
-    public function getScreenshotUrl(): ?string
-    {
-        if ($this->screenshot_path === null) {
-            return null;
-        }
-
-        return Storage::disk(config('help-requests.storage.disk'))->url($this->screenshot_path);
     }
 }

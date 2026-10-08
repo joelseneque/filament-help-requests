@@ -26,6 +26,7 @@ class HelpRequestsServiceProvider extends PackageServiceProvider
                 'create_help_request_settings_table',
                 'add_category_to_help_requests_table',
                 'add_video_url_to_help_requests_table',
+                'add_screenshot_paths_to_help_requests_tables',
             ])
             ->hasCommands([
                 GitHubIntegrationStatusCommand::class,

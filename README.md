@@ -4,10 +4,12 @@ A drop-in help desk for Filament v5 panels.
 
 - **Floating help button** on every panel page. Users pick what kind of
   feedback it is ("Looks broken", "Confusing", …), describe it, and can attach
-  a screenshot and a Loom video. The page they were on is captured
-  automatically.
-- **"My Requests" tab** in the same widget, where users read replies and reply
-  back.
+  screenshots (up to 5) and a Loom video. Screenshots can be pasted or dropped
+  in, then marked with numbered pins ("mark where it goes wrong"); the pins are
+  drawn onto the image and each pin's note is added to the request text. The page
+  they were on is captured automatically.
+- **"My Requests" tab** in the same widget: a collapsible list of their requests
+  (one thread open at a time) where they read replies and reply back.
 - **Admin triage** — a resource to list, filter, reply (with screenshots),
   change status and delete requests.
 - **Notifications** — email + in-app to admins on new requests and replies;
@@ -190,7 +192,7 @@ from other hosts are shown as a plain link rather than an embedded player.
 | `admin_role` | `super_admin` | Role used by the default manage check and for in-app admin alerts. |
 | `notifications.channels` | `['database', 'mail']` | Channels used for requester notifications. |
 | `video.*` | see above | Loom link options. |
-| `storage.*` | `public`, `help-requests`, 5120 KB | Screenshot disk, directory and max size. |
+| `storage.*` | `public`, `help-requests`, 5120 KB, 5 files | Screenshot disk, directory, max size per file and max screenshots per request or reply. |
 | `branding.name` / `branding.logo_url` | `APP_NAME` / none | Shown in emails and GitHub issue text. |
 | `routes.*` | `webhooks/github`, `github/connect`, `github/callback` | Route paths and install-route middleware. |
 | `github.*` | `GITHUB_APP_*` env vars | GitHub App credentials; `schedule_sync` toggles the hourly poll. |
@@ -298,18 +300,86 @@ php artisan help-requests:sync-github     # poll linked issues now; --all includ
 
 ## Upgrading
 
-New versions may add migrations. After updating, publish again — files you
-already have are skipped — and migrate:
+Follow these steps in each app that uses the package.
 
-```bash
-composer update joelseneque/filament-help-requests
-php artisan vendor:publish --tag="help-requests-migrations"
-php artisan migrate
+1. **Update the package.**
+
+   ```bash
+   composer update joelseneque/filament-help-requests
+   ```
+
+   For a new major version, change the constraint in `composer.json` first
+   (e.g. `"^2.0"`).
+
+2. **Publish and run new migrations.** Files you already published are
+   skipped, so only new ones are copied:
+
+   ```bash
+   php artisan vendor:publish --tag="help-requests-migrations"
+   php artisan migrate
+   ```
+
+   Commit the newly published migration files with the upgrade.
+
+3. **Check your published config**, if you have one. Compare it with the
+   package's `config/help-requests.php` and copy over new keys you want to
+   change. Laravel only merges top-level sections, so a new key inside a
+   section you published (e.g. `storage.max_files`) is missing from your file
+   and uses its built-in default until you add it.
+
+4. **Check overridden views**, if you published any to
+   `resources/views/vendor/help-requests`. They will not pick up the
+   package's changes; diff them against the package's `resources/views`.
+
+5. **Rebuild the panel theme**, so Tailwind generates classes used by new
+   widget markup:
+
+   ```bash
+   npm run build
+   ```
+
+6. **Clear caches:**
+
+   ```bash
+   php artisan optimize:clear
+   ```
+
+   Restart queue workers (`php artisan queue:restart`) if you use the GitHub
+   integration.
+
+7. **Smoke test:** open a panel page, send a help request from the **?**
+   button, reply to it from the admin resource and from **My Requests**.
+
+### Version notes
+
+**Unreleased**
+
+- New migration `add_screenshot_paths_to_help_requests_tables` (step 2).
+- New config key `storage.max_files` (default `5`) — add it to a published
+  config's `storage` section to change it (step 3).
+- New widget markup: rebuild the theme (step 5).
+- Livewire widget properties renamed: `screenshot` → `screenshots`,
+  `replyScreenshot` → `replyScreenshots`. Only matters if you extended or
+  tested the widget.
+
+### Trying an unreleased version in your app
+
+To test a local checkout of this package in an app before it is released,
+point the app at the checkout with a Composer path repository:
+
+```json
+"repositories": [
+    { "type": "path", "url": "../filament-help-requests", "options": { "symlink": true } }
+]
 ```
 
-If you published the config, compare it with the package's
-`config/help-requests.php` for new keys. Missing top-level sections fall
-back to the package defaults.
+```bash
+composer require "joelseneque/filament-help-requests:@dev"
+```
+
+Then follow steps 2–7. When you are done, remove the repository entry and
+run `composer require "joelseneque/filament-help-requests:^1.0"` again, so the
+app's `composer.json` and `composer.lock` don't point at your local copy.
 
 ## Testing
 

@@ -79,7 +79,7 @@ class TestCase extends Orchestra
             $table->timestamps();
         });
 
-        foreach (['create_help_requests_tables', 'create_help_request_settings_table', 'add_category_to_help_requests_table', 'add_video_url_to_help_requests_table'] as $migration) {
+        foreach (['create_help_requests_tables', 'create_help_request_settings_table', 'add_category_to_help_requests_table', 'add_video_url_to_help_requests_table', 'add_screenshot_paths_to_help_requests_tables'] as $migration) {
             (include __DIR__."/../database/migrations/{$migration}.php.stub")->up();
         }
     }

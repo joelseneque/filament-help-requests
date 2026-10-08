@@ -24,13 +24,13 @@
         <h2 style="color: #1a1a1a; font-size: 16px; margin-bottom: 8px;">Our reply</h2>
         <div style="background-color: #f9f9f9; border-radius: 6px; padding: 16px; margin-bottom: 24px; white-space: pre-wrap;">{{ $reply->body }}</div>
 
-        @if ($reply->hasScreenshot())
+        @foreach ($reply->screenshotUrls() as $url)
             <div style="margin-bottom: 24px;">
-                <a href="{{ $reply->getScreenshotUrl() }}" style="display: inline-block;">
-                    <img src="{{ $reply->getScreenshotUrl() }}" alt="Screenshot" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #eeeeee;">
+                <a href="{{ $url }}" style="display: inline-block;">
+                    <img src="{{ $url }}" alt="Screenshot {{ $loop->iteration }}" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #eeeeee;">
                 </a>
             </div>
-        @endif
+        @endforeach
 
         <p style="margin-bottom: 20px;">Current status: <strong>{{ $helpRequest->status->getLabel() }}</strong></p>
 
