@@ -1,8 +1,12 @@
 <?php
 
+use Filament\Clusters\Cluster;
+use Filament\Panel;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Mail;
+use Joelseneque\HelpRequests\Filament\Pages\HelpRequestSettings;
 use Joelseneque\HelpRequests\HelpRequests;
+use Joelseneque\HelpRequests\HelpRequestsPlugin;
 use Joelseneque\HelpRequests\Livewire\HelpRequestWidget;
 use Joelseneque\HelpRequests\Mail\HelpRequestSubmittedMail;
 use Joelseneque\HelpRequests\Tests\Fixtures\User;
@@ -73,3 +77,16 @@ it('reads a display name from first and last name columns when there is no name'
     expect(HelpRequests::userName($user))->toBe('Dana Scully')
         ->and(HelpRequests::userFirstName($user))->toBe('Dana');
 });
+
+it('lists the settings page in the cluster it is given', function () {
+    $panel = Panel::make()
+        ->id('clustered')
+        ->plugin(HelpRequestsPlugin::make()->resource(false)->widget(false)->settingsCluster(PluginTestSettingsCluster::class));
+
+    expect($panel->getClusteredComponents(PluginTestSettingsCluster::class))
+        ->toContain(HelpRequestSettings::class)
+        // Once registered, the page resolves the current panel's plugin again, which has no cluster.
+        ->and(HelpRequestSettings::getCluster())->toBeNull();
+});
+
+class PluginTestSettingsCluster extends Cluster {}

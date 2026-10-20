@@ -48,6 +48,18 @@ class HelpRequestSettings extends Page
      */
     public ?array $data = [];
 
+    /**
+     * The plugin registering this page. Filament places a page in its cluster
+     * while the plugin's `register()` is still running, before the panel can
+     * return the plugin, so `getCluster()` needs it handed over directly.
+     */
+    protected static ?HelpRequestsPlugin $registeringPlugin = null;
+
+    public static function registeringPlugin(?HelpRequestsPlugin $plugin): void
+    {
+        static::$registeringPlugin = $plugin;
+    }
+
     public static function getCluster(): ?string
     {
         return static::plugin()?->getSettingsCluster();
@@ -356,6 +368,10 @@ class HelpRequestSettings extends Page
 
     protected static function plugin(): ?HelpRequestsPlugin
     {
+        if (static::$registeringPlugin) {
+            return static::$registeringPlugin;
+        }
+
         try {
             return HelpRequestsPlugin::get();
         } catch (\Throwable) {

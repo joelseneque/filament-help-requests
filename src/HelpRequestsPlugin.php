@@ -55,9 +55,15 @@ class HelpRequestsPlugin implements Plugin
             HelpRequests::usePanel($panel->getId());
         }
 
-        $panel
-            ->resources($this->hasResource ? [HelpRequestResource::class] : [])
-            ->pages($this->hasSettingsPage ? [HelpRequestSettings::class] : []);
+        HelpRequestSettings::registeringPlugin($this);
+
+        try {
+            $panel
+                ->resources($this->hasResource ? [HelpRequestResource::class] : [])
+                ->pages($this->hasSettingsPage ? [HelpRequestSettings::class] : []);
+        } finally {
+            HelpRequestSettings::registeringPlugin(null);
+        }
 
         if ($this->hasWidget) {
             $panel->renderHook(
