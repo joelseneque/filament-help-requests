@@ -57,11 +57,13 @@ class HelpRequestsPlugin implements Plugin
 
         HelpRequestSettings::registeringPlugin($this);
 
-        $panel
-            ->resources($this->hasResource ? [HelpRequestResource::class] : [])
-            ->pages($this->hasSettingsPage ? [HelpRequestSettings::class] : []);
-
-        HelpRequestSettings::registeringPlugin(null);
+        try {
+            $panel
+                ->resources($this->hasResource ? [HelpRequestResource::class] : [])
+                ->pages($this->hasSettingsPage ? [HelpRequestSettings::class] : []);
+        } finally {
+            HelpRequestSettings::registeringPlugin(null);
+        }
 
         if ($this->hasWidget) {
             $panel->renderHook(

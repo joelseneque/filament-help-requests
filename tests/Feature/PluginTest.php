@@ -84,7 +84,9 @@ it('lists the settings page in the cluster it is given', function () {
         ->plugin(HelpRequestsPlugin::make()->resource(false)->widget(false)->settingsCluster(PluginTestSettingsCluster::class));
 
     expect($panel->getClusteredComponents(PluginTestSettingsCluster::class))
-        ->toContain(HelpRequestSettings::class);
+        ->toContain(HelpRequestSettings::class)
+        // Once registered, the page resolves the current panel's plugin again, which has no cluster.
+        ->and(HelpRequestSettings::getCluster())->toBeNull();
 });
 
 class PluginTestSettingsCluster extends Cluster {}
