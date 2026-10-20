@@ -354,7 +354,7 @@ Follow these steps in each app that uses the package.
 
 ### Version notes
 
-**Unreleased**
+**1.2.0**
 
 - New migration `add_attachments_to_help_requests_tables` (step 2). It moves
   every `screenshot_path` / `screenshot_paths` value into a new `attachments`
