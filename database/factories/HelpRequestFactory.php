@@ -24,7 +24,6 @@ class HelpRequestFactory extends Factory
             'page_url' => $this->faker->url(),
             'page_title' => $this->faker->sentence(3),
             'comment' => $this->faker->paragraph(),
-            'screenshot_path' => null,
             'status' => HelpRequestStatus::Open,
             'resolved_at' => null,
         ];

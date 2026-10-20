@@ -85,16 +85,17 @@ it('lets an admin attach a screenshot to their reply', function () {
     Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
         ->callAction(TestAction::make('reply'), [
             'body' => 'This is the screen you should be seeing.',
-            'screenshot_paths' => [UploadedFile::fake()->image('fixed.png'), UploadedFile::fake()->image('also.png')],
+            'attachments' => [UploadedFile::fake()->image('fixed.png'), UploadedFile::fake()->create('steps.pdf', 20, 'application/pdf')],
             'status' => HelpRequestStatus::InProgress->value,
         ])
         ->assertHasNoActionErrors();
 
     $reply = $request->replies()->firstOrFail();
 
-    expect($reply->screenshotPaths())->toHaveCount(2);
+    expect($reply->attachmentPaths())->toHaveCount(2)
+        ->and(array_map(basename(...), $reply->attachmentPaths()))->toBe(['fixed.png', 'steps.pdf']);
 
-    foreach ($reply->screenshotPaths() as $path) {
+    foreach ($reply->attachmentPaths() as $path) {
         Storage::disk('public')->assertExists($path);
     }
 });
@@ -110,12 +111,14 @@ it('renders an attached reply screenshot in the conversation', function () {
     HelpRequestReply::factory()->create([
         'help_request_id' => $request->id,
         'body' => 'Have a look at this.',
-        'screenshot_path' => $path,
+        'attachments' => [$path, 'help-requests/01ABC/invoice.pdf'],
     ]);
 
     Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
         ->assertOk()
-        ->assertSee(Storage::disk('public')->url($path), escape: false);
+        ->assertSee(Storage::disk('public')->url($path), escape: false)
+        ->assertSee(Storage::disk('public')->url('help-requests/01ABC/invoice.pdf'), escape: false)
+        ->assertSee('invoice.pdf');
 });
 
 it('leaves the reply screenshot empty when none is attached', function () {
@@ -137,7 +140,7 @@ it('leaves the reply screenshot empty when none is attached', function () {
         ])
         ->assertHasNoActionErrors();
 
-    expect($request->replies()->firstOrFail()->hasScreenshot())->toBeFalse();
+    expect($request->replies()->firstOrFail()->hasAttachments())->toBeFalse();
 });
 
 it('emails the reply on its own when the status is not being finished', function () {

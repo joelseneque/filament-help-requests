@@ -27,13 +27,7 @@
             <h2 style="color: #1a1a1a; font-size: 16px; margin-bottom: 8px;">Closing note</h2>
             <div style="background-color: #f9f9f9; border-radius: 6px; padding: 16px; margin-bottom: 24px; white-space: pre-wrap;">{{ $comment->body }}</div>
 
-            @if ($comment->hasScreenshot())
-                <div style="margin-bottom: 24px;">
-                    <a href="{{ $comment->getScreenshotUrl() }}" style="display: inline-block;">
-                        <img src="{{ $comment->getScreenshotUrl() }}" alt="Screenshot" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #eeeeee;">
-                    </a>
-                </div>
-            @endif
+            @include('help-requests::emails.partials.attachments', ['record' => $comment])
         @endif
 
         <p style="margin-bottom: 20px;">

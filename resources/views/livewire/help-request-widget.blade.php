@@ -292,19 +292,25 @@
                                                 {{ $isMine ? 'You' : ($reply->user ? \Joelseneque\HelpRequests\HelpRequests::userFirstName($reply->user) : $reply->authorName()) }} replied
                                             </p>
                                             <p class="text-sm text-gray-700 dark:text-gray-200">{{ $reply->body }}</p>
-                                            @if ($reply->hasScreenshot())
+                                            @if ($reply->imageAttachmentPaths() !== [])
                                                 <div class="mt-1.5 flex flex-wrap gap-1.5">
-                                                    @foreach ($reply->screenshotUrls() as $url)
-                                                        <a href="{{ $url }}" target="_blank" rel="noopener" class="block">
+                                                    @foreach ($reply->imageAttachmentPaths() as $path)
+                                                        <a href="{{ $reply->attachmentUrl($path) }}" target="_blank" rel="noopener" class="block">
                                                             <img
-                                                                src="{{ $url }}"
-                                                                alt="Reply screenshot {{ $loop->iteration }}"
+                                                                src="{{ $reply->attachmentUrl($path) }}"
+                                                                alt="{{ $reply->attachmentName($path) }}"
                                                                 class="max-h-32 w-auto rounded border border-gray-200 dark:border-white/10"
                                                             />
                                                         </a>
                                                     @endforeach
                                                 </div>
                                             @endif
+                                            @foreach ($reply->fileAttachmentPaths() as $path)
+                                                <a href="{{ $reply->attachmentUrl($path) }}" target="_blank" rel="noopener" class="mt-1 flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline dark:text-primary-400">
+                                                    <x-heroicon-o-paper-clip class="h-3.5 w-3.5 shrink-0" />
+                                                    <span class="truncate">{{ $reply->attachmentName($path) }}</span>
+                                                </a>
+                                            @endforeach
                                         </div>
                                     @endforeach
                                 </div>

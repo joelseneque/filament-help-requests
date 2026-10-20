@@ -15,6 +15,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Str;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
 use Joelseneque\HelpRequests\HelpRequests;
@@ -22,6 +23,7 @@ use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequestReply;
 use Joelseneque\HelpRequests\Services\GitHubIssueService;
 use Joelseneque\HelpRequests\Support\HelpRequestNotifier;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ViewHelpRequest extends ViewRecord
 {
@@ -71,11 +73,13 @@ class ViewHelpRequest extends ViewRecord
                             ->visible(fn (HelpRequest $record): bool => $record->hasVideo()),
                         ImageEntry::make('screenshots')
                             ->label('Screenshots')
-                            ->state(fn (HelpRequest $record): array => $record->screenshotPaths())
+                            ->state(fn (HelpRequest $record): array => $record->imageAttachmentPaths())
                             ->disk(config('help-requests.storage.disk'))
                             ->imageHeight(240)
                             ->columnSpanFull()
-                            ->visible(fn (HelpRequest $record): bool => $record->hasScreenshot()),
+                            ->visible(fn (HelpRequest $record): bool => $record->imageAttachmentPaths() !== []),
+                        self::fileLinks('files')
+                            ->label('Files'),
                     ])
                     ->columns(2)
                     ->columnSpanFull(),
@@ -124,11 +128,13 @@ class ViewHelpRequest extends ViewRecord
                                     ->columnSpanFull(),
                                 ImageEntry::make('screenshots')
                                     ->label('')
-                                    ->state(fn (HelpRequestReply $record): array => $record->screenshotPaths())
+                                    ->state(fn (HelpRequestReply $record): array => $record->imageAttachmentPaths())
                                     ->disk(config('help-requests.storage.disk'))
                                     ->imageHeight(160)
                                     ->columnSpanFull()
-                                    ->visible(fn (HelpRequestReply $record): bool => $record->hasScreenshot()),
+                                    ->visible(fn (HelpRequestReply $record): bool => $record->imageAttachmentPaths() !== []),
+                                self::fileLinks('files')
+                                    ->label(''),
                             ])
                             ->columns(2),
                     ])
@@ -146,7 +152,7 @@ class ViewHelpRequest extends ViewRecord
                         ->label('Your reply')
                         ->required()
                         ->rows(4),
-                    self::screenshotUpload(),
+                    self::attachmentUpload(),
                     Select::make('status')
                         ->label('Set status')
                         ->options(HelpRequestStatus::class)
@@ -154,7 +160,7 @@ class ViewHelpRequest extends ViewRecord
                         ->required(),
                 ])
                 ->action(function (array $data, HelpRequest $record): void {
-                    $reply = $this->recordReply($record, $data['body'], $data['screenshot_paths'] ?? []);
+                    $reply = $this->recordReply($record, $data['body'], $data['attachments'] ?? []);
 
                     $notifiedResolution = $this->applyStatus(
                         $record,
@@ -191,12 +197,12 @@ class ViewHelpRequest extends ViewRecord
                             ? 'Included in the email telling them their request is done. Leave blank to send it without a note.'
                             : 'Optional — added to the conversation and posted to the GitHub issue.')
                         ->rows(4),
-                    self::screenshotUpload()
+                    self::attachmentUpload()
                         ->helperText('Optional — attached to the comment above.'),
                 ])
                 ->action(function (array $data, HelpRequest $record): void {
                     $comment = filled($data['comment'] ?? null)
-                        ? $this->recordReply($record, $data['comment'], $data['screenshot_paths'] ?? [])
+                        ? $this->recordReply($record, $data['comment'], $data['attachments'] ?? [])
                         : null;
 
                     $notifiedResolution = $this->applyStatus(
@@ -256,18 +262,38 @@ class ViewHelpRequest extends ViewRecord
     }
 
     /**
-     * The optional screenshots that can be attached to a reply, stored beside
-     * the screenshots uploaded with the original request.
+     * Download links for the attachments that are not images, which the
+     * ImageEntry beside it cannot show.
      */
-    protected static function screenshotUpload(): FileUpload
+    protected static function fileLinks(string $name): TextEntry
     {
-        return FileUpload::make('screenshot_paths')
-            ->label('Screenshots')
-            ->image()
+        return TextEntry::make($name)
+            ->state(fn (HelpRequest|HelpRequestReply $record): array => array_map(
+                fn (string $path): string => '<a href="'.e($record->attachmentUrl($path)).'" target="_blank" rel="noopener" class="text-primary-600 hover:underline dark:text-primary-400">'.e($record->attachmentName($path)).'</a>',
+                $record->fileAttachmentPaths(),
+            ))
+            ->html()
+            ->listWithLineBreaks()
+            ->columnSpanFull()
+            ->visible(fn (HelpRequest|HelpRequestReply $record): bool => $record->fileAttachmentPaths() !== []);
+    }
+
+    /**
+     * The optional screenshots and files that can be attached to a reply.
+     * Each keeps its original name in its own folder, like widget uploads,
+     * so the stored basename is the name shown.
+     */
+    protected static function attachmentUpload(): FileUpload
+    {
+        return FileUpload::make('attachments')
+            ->label('Attachments')
+            ->acceptedFileTypes(config('help-requests.storage.accepted_file_types'))
             ->multiple()
             ->maxFiles(config('help-requests.storage.max_files', 5))
             ->disk(config('help-requests.storage.disk'))
             ->directory(config('help-requests.storage.directory'))
+            ->rules(['extensions:'.implode(',', HelpRequests::acceptedExtensions())])
+            ->getUploadedFileNameForStorageUsing(fn (TemporaryUploadedFile $file): string => Str::ulid().'/'.HelpRequests::attachmentFileName($file->getClientOriginalName()))
             ->visibility('public')
             ->maxSize(config('help-requests.storage.max_size_kb'))
             ->helperText('Optional — shown to the requester with your reply.');
@@ -276,14 +302,14 @@ class ViewHelpRequest extends ViewRecord
     /**
      * Record a reply and mirror it onto the linked GitHub issue.
      *
-     * @param  list<string>  $screenshotPaths
+     * @param  list<string>  $attachments
      */
-    protected function recordReply(HelpRequest $record, string $body, array $screenshotPaths = []): HelpRequestReply
+    protected function recordReply(HelpRequest $record, string $body, array $attachments = []): HelpRequestReply
     {
         $reply = $record->replies()->create([
             'user_id' => auth()->id(),
             'body' => $body,
-            'screenshot_paths' => array_values($screenshotPaths) ?: null,
+            'attachments' => array_values($attachments) ?: null,
         ]);
 
         if ($record->hasGithubIssue()) {

@@ -370,8 +370,8 @@ class GitHubIssueService
 
         $body = "**{$author}** replied in {$appName}:\n\n{$reply->body}";
 
-        foreach ($reply->screenshotUrls() as $screenshot) {
-            $body .= "\n\n![Screenshot]({$screenshot})";
+        foreach ($this->attachmentMarkdown($reply) as $line) {
+            $body .= "\n\n{$line}";
         }
 
         try {
@@ -472,9 +472,9 @@ class GitHubIssueService
             $lines[] = '**Video:** '.$helpRequest->video_url;
         }
 
-        foreach ($helpRequest->screenshotUrls() as $screenshot) {
+        foreach ($this->attachmentMarkdown($helpRequest) as $line) {
             $lines[] = '';
-            $lines[] = "![Screenshot]({$screenshot})";
+            $lines[] = $line;
         }
 
         $lines[] = '';
@@ -494,5 +494,21 @@ class GitHubIssueService
         }
 
         return 'Unknown error.';
+    }
+
+    /**
+     * Images embed in the issue; other files become links. Brackets are
+     * stripped from names so they cannot break out of the markdown link text.
+     *
+     * @return list<string>
+     */
+    protected function attachmentMarkdown(HelpRequest|HelpRequestReply $record): array
+    {
+        return array_map(function (string $path) use ($record): string {
+            $name = str_replace(['[', ']'], '', $record->attachmentName($path));
+            $link = "[{$name}](<{$record->attachmentUrl($path)}>)";
+
+            return $record->isImageAttachment($path) ? "!{$link}" : $link;
+        }, $record->attachmentPaths());
     }
 }

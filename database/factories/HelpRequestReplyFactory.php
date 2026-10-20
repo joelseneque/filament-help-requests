@@ -23,14 +23,13 @@ class HelpRequestReplyFactory extends Factory
             'help_request_id' => HelpRequest::factory(),
             'user_id' => HelpRequests::userModel()::factory(),
             'body' => $this->faker->paragraph(),
-            'screenshot_path' => null,
         ];
     }
 
-    public function withScreenshot(string $path = 'help-requests/reply-screenshot.png'): static
+    public function withAttachment(string $path = 'help-requests/reply-screenshot.png'): static
     {
         return $this->state(fn (array $attributes): array => [
-            'screenshot_path' => $path,
+            'attachments' => [$path],
         ]);
     }
 }

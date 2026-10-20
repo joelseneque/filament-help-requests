@@ -48,11 +48,11 @@
             <p style="margin-bottom: 24px;"><a href="{{ $helpRequest->video_url }}">Watch the recording{{ $helpRequest->isLoomVideo() ? ' in Loom' : '' }}</a></p>
         @endif
 
-        @if ($helpRequest->hasScreenshot())
-            <p style="margin-bottom: 8px;"><strong>{{ str('Screenshot')->plural(count($helpRequest->screenshotPaths())) }}:</strong></p>
+        @if ($helpRequest->hasAttachments())
+            <p style="margin-bottom: 8px;"><strong>{{ str('Attachment')->plural(count($helpRequest->attachmentPaths())) }}:</strong></p>
             <p style="margin-bottom: 24px;">
-                @foreach ($helpRequest->screenshotUrls() as $url)
-                    <a href="{{ $url }}">View screenshot{{ $loop->count > 1 ? ' '.$loop->iteration : '' }}</a>@if (! $loop->last)<br>@endif
+                @foreach ($helpRequest->attachmentPaths() as $path)
+                    <a href="{{ $helpRequest->attachmentUrl($path) }}">{{ $helpRequest->attachmentName($path) }}</a>@if (! $loop->last)<br>@endif
                 @endforeach
             </p>
         @endif

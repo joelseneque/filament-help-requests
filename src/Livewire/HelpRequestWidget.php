@@ -7,6 +7,7 @@ use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
@@ -28,6 +29,8 @@ use Livewire\WithFileUploads;
 class HelpRequestWidget extends Component
 {
     use WithFileUploads;
+
+    protected const FILE_TYPE_MESSAGE = 'Attach an image, PDF, Word, Excel, CSV or text file.';
 
     public bool $open = false;
 
@@ -129,7 +132,13 @@ class HelpRequestWidget extends Component
     {
         return [
             $files => ['nullable', 'array', 'max:'.config('help-requests.storage.max_files', 5)],
-            "{$files}.*" => ['nullable', 'image', 'max:'.config('help-requests.storage.max_size_kb')],
+            "{$files}.*" => [
+                'nullable',
+                'file',
+                'mimetypes:'.implode(',', config('help-requests.storage.accepted_file_types')),
+                'extensions:'.implode(',', HelpRequests::acceptedExtensions()),
+                'max:'.config('help-requests.storage.max_size_kb'),
+            ],
             $notes => ['nullable', 'array'],
             "{$notes}.*" => ['nullable', 'array', 'max:20'],
             "{$notes}.*.*" => ['nullable', 'string', 'max:500'],
@@ -141,7 +150,22 @@ class HelpRequestWidget extends Component
      */
     protected function validationAttributes(): array
     {
-        return ['videoUrl' => 'video link'];
+        return ['videoUrl' => 'video link', 'screenshots' => 'attachments', 'screenshots.*' => 'attachment'];
+    }
+
+    /**
+     * The rule's own message lists raw MIME types, which mean nothing to a requester.
+     *
+     * @return array<string, string>
+     */
+    protected function messages(): array
+    {
+        return [
+            'screenshots.*.mimetypes' => self::FILE_TYPE_MESSAGE,
+            'screenshots.*.extensions' => self::FILE_TYPE_MESSAGE,
+            'replyScreenshots.*.*.mimetypes' => self::FILE_TYPE_MESSAGE,
+            'replyScreenshots.*.*.extensions' => self::FILE_TYPE_MESSAGE,
+        ];
     }
 
     /**
@@ -199,7 +223,7 @@ class HelpRequestWidget extends Component
             'category' => $this->category !== '' ? $this->category : null,
             'video_url' => HelpRequests::videoLinksEnabled() && trim($this->videoUrl) !== '' ? trim($this->videoUrl) : null,
             'comment' => $this->withMarkerNotes($this->comment, $this->screenshots, $this->screenshotNotes),
-            'screenshot_paths' => $this->storeUploads($this->screenshots),
+            'attachments' => $this->storeUploads($this->screenshots),
             'status' => HelpRequestStatus::Open,
         ]);
 
@@ -236,8 +260,8 @@ class HelpRequestWidget extends Component
             ],
             attributes: [
                 "replyBody.{$helpRequestId}" => 'reply',
-                "replyScreenshots.{$helpRequestId}" => 'screenshots',
-                "replyScreenshots.{$helpRequestId}.*" => 'screenshot',
+                "replyScreenshots.{$helpRequestId}" => 'attachments',
+                "replyScreenshots.{$helpRequestId}.*" => 'attachment',
             ],
         );
 
@@ -250,7 +274,7 @@ class HelpRequestWidget extends Component
                 $screenshots,
                 $this->replyScreenshotNotes[$helpRequestId] ?? [],
             ),
-            'screenshot_paths' => $this->storeUploads($screenshots),
+            'attachments' => $this->storeUploads($screenshots),
         ]);
 
         if ($helpRequest->hasGithubIssue()) {
@@ -272,14 +296,18 @@ class HelpRequestWidget extends Component
      * Notes keep their marker's number, so a blank note in the middle does not
      * shift the numbers away from the dots burned into the image. Screenshots
      * are numbered in the order they are stored, and only when there are
-     * several. Notes for a removed screenshot are dropped with it.
+     * several. Notes for a removed screenshot are dropped with it. Other
+     * files carry no markers, so they don't count towards the numbering.
      *
      * @param  array<int, TemporaryUploadedFile|null>  $screenshots
      * @param  array<int, array<int, string|null>>  $notes
      */
     protected function withMarkerNotes(string $text, array $screenshots, array $notes): string
     {
-        $screenshots = array_filter($screenshots);
+        $screenshots = array_filter(
+            $screenshots,
+            fn (?TemporaryUploadedFile $file): bool => str_starts_with((string) $file?->getMimeType(), 'image/'),
+        );
         $number = 0;
 
         foreach (array_keys($screenshots) as $slot) {
@@ -302,14 +330,18 @@ class HelpRequestWidget extends Component
     }
 
     /**
+     * Each file keeps its original name inside its own folder, so the stored
+     * basename doubles as the display name without two uploads colliding.
+     *
      * @param  array<int, TemporaryUploadedFile|null>  $files
      * @return list<string>|null
      */
     protected function storeUploads(array $files): ?array
     {
         $paths = array_values(array_filter(array_map(
-            fn (TemporaryUploadedFile $file): string|false => $file->store(
-                config('help-requests.storage.directory'),
+            fn (TemporaryUploadedFile $file): string|false => $file->storeAs(
+                config('help-requests.storage.directory').'/'.Str::ulid(),
+                HelpRequests::attachmentFileName($file->getClientOriginalName()),
                 config('help-requests.storage.disk'),
             ),
             array_filter($files),

@@ -4,13 +4,14 @@ A drop-in help desk for Filament v5 panels.
 
 - **Floating help button** on every panel page. Users pick what kind of
   feedback it is ("Looks broken", "Confusing", …), describe it, and can attach
-  screenshots (up to 5) and a Loom video. Screenshots can be pasted or dropped
+  up to 5 screenshots or files (PDF, Word, Excel, CSV, text) and a Loom video.
+  Files keep their original name (made URL-safe). Screenshots can be pasted or dropped
   in, then marked with numbered pins ("mark where it goes wrong"); the pins are
   drawn onto the image and each pin's note is added to the request text. The page
   they were on is captured automatically.
 - **"My Requests" tab** in the same widget: a collapsible list of their requests
   (one thread open at a time) where they read replies and reply back.
-- **Admin triage** — a resource to list, filter, reply (with screenshots),
+- **Admin triage** — a resource to list, filter, reply (with attachments),
   change status and delete requests.
 - **Notifications** — email + in-app to admins on new requests and replies;
   email + in-app to the requester on replies and resolution.
@@ -42,7 +43,7 @@ php artisan migrate
 php artisan vendor:publish --tag="help-requests-config"
 ```
 
-Make sure screenshots can be served:
+Make sure attachments can be served:
 
 ```bash
 php artisan storage:link
@@ -192,7 +193,8 @@ from other hosts are shown as a plain link rather than an embedded player.
 | `admin_role` | `super_admin` | Role used by the default manage check and for in-app admin alerts. |
 | `notifications.channels` | `['database', 'mail']` | Channels used for requester notifications. |
 | `video.*` | see above | Loom link options. |
-| `storage.*` | `public`, `help-requests`, 5120 KB, 5 files | Screenshot disk, directory, max size per file and max screenshots per request or reply. |
+| `storage.*` | `public`, `help-requests`, 5120 KB, 5 files | Attachment disk, directory, max size per file and max attachments per request or reply. The disk must serve public URLs — GitHub issues and emails link the files directly. |
+| `storage.accepted_file_types` | images, PDF, Word, Excel, CSV, text | MIME types users and admins may attach. Uploads must match by content and by file extension. Don't add HTML, SVG or scripts: served from your domain they would run as your site. |
 | `branding.name` / `branding.logo_url` | `APP_NAME` / none | Shown in emails and GitHub issue text. |
 | `routes.*` | `webhooks/github`, `github/connect`, `github/callback` | Route paths and install-route middleware. |
 | `github.*` | `GITHUB_APP_*` env vars | GitHub App credentials; `schedule_sync` toggles the hourly poll. |
@@ -351,6 +353,24 @@ Follow these steps in each app that uses the package.
    button, reply to it from the admin resource and from **My Requests**.
 
 ### Version notes
+
+**Unreleased**
+
+- New migration `add_attachments_to_help_requests_tables` (step 2). It moves
+  every `screenshot_path` / `screenshot_paths` value into a new `attachments`
+  list and **drops both screenshot columns** — update any of your own code
+  that reads them.
+- New config key `storage.accepted_file_types` — add it to a published
+  config's `storage` section to change what can be attached (step 3).
+- New widget markup and email partial `emails/partials/attachments`: rebuild
+  the theme (step 5) and re-diff overridden views (step 4).
+- Models: `HasScreenshots` is now `HasAttachments`. `screenshotPaths()`,
+  `screenshotUrls()`, `hasScreenshot()` and `getScreenshotUrl()` are replaced
+  by `attachmentPaths()`, `imageAttachmentPaths()`, `fileAttachmentPaths()`,
+  `attachmentUrl($path)`, `attachmentName($path)` and `hasAttachments()`.
+  The reply factory state `withScreenshot()` is now `withAttachment()`.
+- Admin reply and status forms: the upload field is `attachments`
+  (was `screenshot_paths`). Only matters if you tested those actions.
 
 **1.1.0**
 
