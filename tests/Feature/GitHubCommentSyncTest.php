@@ -114,7 +114,7 @@ it('includes an attached screenshot in the github comment', function (): void {
         'api.github.com/repos/*/issues/42/comments' => Http::response(['id' => 7778], 201),
     ]);
 
-    $reply = HelpRequestReply::factory()->withScreenshot()->create([
+    $reply = HelpRequestReply::factory()->withAttachment()->create([
         'help_request_id' => $this->helpRequest->id,
         'user_id' => User::factory()->create()->id,
         'body' => 'Here is the screen I am seeing.',
@@ -122,7 +122,24 @@ it('includes an attached screenshot in the github comment', function (): void {
 
     expect(app(GitHubIssueService::class)->postComment($reply)['ok'])->toBeTrue();
 
-    Http::assertSent(fn ($request) => str_contains($request['body'], '![Screenshot]('.$reply->getScreenshotUrl().')'));
+    Http::assertSent(fn ($request) => str_contains($request['body'], '![reply-screenshot.png](<'.$reply->attachmentUrl('help-requests/reply-screenshot.png').'>)'));
+});
+
+it('links a non-image attachment in the github comment', function (): void {
+    Http::fake([
+        'api.github.com/repos/*/issues/42/comments' => Http::response(['id' => 7779], 201),
+    ]);
+
+    $reply = HelpRequestReply::factory()->withAttachment('help-requests/01ABC/quote [v2].pdf')->create([
+        'help_request_id' => $this->helpRequest->id,
+        'user_id' => User::factory()->create()->id,
+        'body' => 'The signed quote.',
+    ]);
+
+    expect(app(GitHubIssueService::class)->postComment($reply)['ok'])->toBeTrue();
+
+    Http::assertSent(fn ($request) => str_contains($request['body'], '[quote v2.pdf](<'.$reply->attachmentUrl('help-requests/01ABC/quote [v2].pdf').'>)')
+        && ! str_contains($request['body'], '![quote'));
 });
 
 it('never posts a reply to github twice', function (): void {

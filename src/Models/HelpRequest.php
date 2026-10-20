@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
 use Joelseneque\HelpRequests\Database\Factories\HelpRequestFactory;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
-use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
+use Joelseneque\HelpRequests\Models\Concerns\HasAttachments;
 
 /**
  * @property int $id
@@ -19,8 +19,7 @@ use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
  * @property string|null $page_title
  * @property string|null $category
  * @property string $comment
- * @property string|null $screenshot_path
- * @property list<string>|null $screenshot_paths
+ * @property list<string>|null $attachments
  * @property string|null $video_url
  * @property HelpRequestStatus $status
  * @property Carbon|null $resolved_at
@@ -32,10 +31,10 @@ use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
  */
 class HelpRequest extends Model
 {
+    use HasAttachments;
+
     /** @use HasFactory<HelpRequestFactory> */
     use HasFactory;
-
-    use HasScreenshots;
 
     protected $fillable = [
         'user_id',
@@ -43,8 +42,7 @@ class HelpRequest extends Model
         'page_title',
         'category',
         'comment',
-        'screenshot_path',
-        'screenshot_paths',
+        'attachments',
         'video_url',
         'status',
         'resolved_at',
@@ -62,7 +60,7 @@ class HelpRequest extends Model
     {
         return [
             'status' => HelpRequestStatus::class,
-            'screenshot_paths' => 'array',
+            'attachments' => 'array',
             'resolved_at' => 'datetime',
             'github_issue_number' => 'integer',
             'github_synced_at' => 'datetime',

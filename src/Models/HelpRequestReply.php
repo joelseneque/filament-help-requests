@@ -7,31 +7,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Joelseneque\HelpRequests\Database\Factories\HelpRequestReplyFactory;
 use Joelseneque\HelpRequests\HelpRequests;
-use Joelseneque\HelpRequests\Models\Concerns\HasScreenshots;
+use Joelseneque\HelpRequests\Models\Concerns\HasAttachments;
 
 /**
  * @property int $id
  * @property int $help_request_id
  * @property int|null $user_id
  * @property string $body
- * @property string|null $screenshot_path
- * @property list<string>|null $screenshot_paths
+ * @property list<string>|null $attachments
  * @property int|null $github_comment_id
  * @property string|null $github_author
  */
 class HelpRequestReply extends Model
 {
+    use HasAttachments;
+
     /** @use HasFactory<HelpRequestReplyFactory> */
     use HasFactory;
-
-    use HasScreenshots;
 
     protected $fillable = [
         'help_request_id',
         'user_id',
         'body',
-        'screenshot_path',
-        'screenshot_paths',
+        'attachments',
         'github_comment_id',
         'github_author',
     ];
@@ -43,7 +41,7 @@ class HelpRequestReply extends Model
     {
         return [
             'github_comment_id' => 'integer',
-            'screenshot_paths' => 'array',
+            'attachments' => 'array',
         ];
     }
 

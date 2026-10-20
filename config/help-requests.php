@@ -72,16 +72,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Screenshot storage
+    | Attachment storage
     |--------------------------------------------------------------------------
+    |
+    | The disk must serve public URLs: GitHub issues and emails link the files
+    | directly. Keep HTML, SVG and scripts out of accepted_file_types for that
+    | reason — served from your domain they would run as your site.
+    |
     */
 
     'storage' => [
         'disk' => 'public',
         'directory' => 'help-requests',
         'max_size_kb' => 5120,
-        // Screenshots per request or reply.
+        // Attachments (screenshots and files) per request or reply.
         'max_files' => 5,
+        'accepted_file_types' => [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'text/plain',
+        ],
     ],
 
     /*

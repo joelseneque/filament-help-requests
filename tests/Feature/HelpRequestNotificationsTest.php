@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Mail;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\Pages\ViewHelpRequest;
 use Joelseneque\HelpRequests\Livewire\HelpRequestWidget;
+use Joelseneque\HelpRequests\Mail\HelpRequestRepliedMail;
+use Joelseneque\HelpRequests\Mail\HelpRequestSubmittedMail;
 use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequestReply;
 use Joelseneque\HelpRequests\Notifications\HelpRequestReplyNotification;
@@ -157,3 +159,21 @@ it('ignores a missing or unparseable help request id', function (mixed $value) {
     'a zero' => ['0'],
     'an empty string' => [''],
 ]);
+
+it('shows image attachments inline and links other files in emails', function () {
+    $request = HelpRequest::factory()->create(['attachments' => ['help-requests/01A/screen.png', 'help-requests/01B/quote.pdf']]);
+    $reply = HelpRequestReply::factory()->create([
+        'help_request_id' => $request->id,
+        'attachments' => ['help-requests/01C/fixed.png', 'help-requests/01D/steps.docx'],
+    ]);
+
+    expect((new HelpRequestSubmittedMail($request))->render())
+        ->toContain('Attachments:')
+        ->toContain('>screen.png</a>')
+        ->toContain('>quote.pdf</a>');
+
+    expect((new HelpRequestRepliedMail($request, $reply))->render())
+        ->toContain('<img src="'.$reply->attachmentUrl('help-requests/01C/fixed.png').'"')
+        ->toContain('>steps.docx</a>')
+        ->not->toContain('<img src="'.$reply->attachmentUrl('help-requests/01D/steps.docx').'"');
+});

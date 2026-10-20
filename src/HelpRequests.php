@@ -11,6 +11,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
 use Joelseneque\HelpRequests\Models\HelpRequest;
+use Symfony\Component\Mime\MimeTypes;
 
 /**
  * App-wide hooks for the help desk.
@@ -337,6 +338,39 @@ class HelpRequests
         }
 
         return $home.(str_contains($home, '?') ? '&' : '?').'help_request='.$helpRequest->getKey();
+    }
+
+    /**
+     * File extensions matching `storage.accepted_file_types`. Uploads are
+     * checked against these as well as by content: content sniffing reads
+     * an HTML page as text/plain, and the stored file keeps its extension,
+     * which is what the web server serves it by.
+     *
+     * @return list<string>
+     */
+    public static function acceptedExtensions(): array
+    {
+        $mimeTypes = MimeTypes::getDefault();
+
+        return array_values(array_unique(array_merge(...array_map(
+            fn (string $type): array => $mimeTypes->getExtensions($type),
+            config('help-requests.storage.accepted_file_types', []),
+        ))));
+    }
+
+    /**
+     * The name an upload is stored under: its original name, reduced to
+     * characters that are safe in a URL path and in markdown link text, and
+     * short enough for any filesystem. It is also the name shown to people.
+     */
+    public static function attachmentFileName(string $originalName): string
+    {
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $base = pathinfo($originalName, PATHINFO_FILENAME);
+        $base = mb_strcut((string) preg_replace('/[^\p{L}\p{N} ._()-]+/u', '-', $base), 0, 100, 'UTF-8');
+        $base = trim($base, ' .-') ?: 'file';
+
+        return $extension === '' ? $base : "{$base}.{$extension}";
     }
 
     /**

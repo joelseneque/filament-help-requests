@@ -5,7 +5,9 @@
     "{$model}.{slot}", and the notes go to "{$notesModel}.{slot}" for the
     component to append to the text, so every channel (admin, email, GitHub)
     gets them without knowing about markers. Several images are marked one
-    after another.
+    after another. Other files (PDF, Word, Excel…) skip the marker step and
+    upload straight away; the server checks them against
+    storage.accepted_file_types.
 
     @param string $model        Livewire array of uploads, e.g. "screenshots" or "replyScreenshots.5"
     @param string $notesModel   Livewire array of marker notes, keyed like $model
@@ -22,12 +24,14 @@
         notesModel: @js($notesModel),
         max: @js($max),
         maxBytes: @js(config('help-requests.storage.max_size_kb') * 1024),
+        extensions: @js(\Joelseneque\HelpRequests\HelpRequests::acceptedExtensions()),
         {{-- Slots only ever grow, so a removed screenshot's slot is never reused for another's notes. --}}
         nextSlot: @js(count($files)),
         editing: false,
         saving: false,
         dragging: false,
         progress: null,
+        uploading: 0,
         queue: [],
         {{-- Per slot: the unmarked image and its markers, so "Edit marks" starts from a clean copy. --}}
         originals: {},
@@ -40,7 +44,7 @@
             const form = this.$el.closest('form');
 
             form?.addEventListener('paste', (event) => {
-                const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+                const files = [...(event.clipboardData?.files ?? [])];
 
                 if (files.length) {
                     event.preventDefault();
@@ -58,14 +62,32 @@
 
         pick(files) {
             const attached = this.$root.querySelectorAll('[data-screenshot-slot]').length;
-            const room = this.max - attached - this.queue.length - (this.editing && this.originals[this.slot] === undefined ? 1 : 0);
-            const images = [...files].filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, room));
+            const room = this.max - attached - this.uploading - this.queue.length - (this.editing && this.originals[this.slot] === undefined ? 1 : 0);
+            {{-- Paste and drop ignore the input's accept list, so unsupported files are skipped here rather than failing on submit. --}}
+            const picked = [...files]
+                .filter((f) => f.type.startsWith('image/') || (f.size <= this.maxBytes && this.extensions.includes(f.name.split('.').pop().toLowerCase())))
+                .slice(0, Math.max(0, room));
 
-            this.queue.push(...images);
+            this.queue.push(...picked.filter((f) => f.type.startsWith('image/')));
+            picked.filter((f) => ! f.type.startsWith('image/')).forEach((f) => this.uploadFile(f));
 
             if (! this.editing) {
                 this.next();
             }
+        },
+
+        uploadFile(file) {
+            this.uploading++;
+
+            const settle = () => { this.uploading--; if (this.uploading === 0) this.progress = null; };
+
+            this.$wire.upload(
+                `${this.model}.${this.nextSlot++}`,
+                file,
+                settle,
+                settle,
+                (event) => { this.progress = event.detail.progress; },
+            );
         },
 
         next() {
@@ -203,7 +225,7 @@
     <input
         type="file"
         x-ref="file"
-        accept="image/*"
+        accept="{{ implode(',', config('help-requests.storage.accepted_file_types')) }}"
         multiple
         class="sr-only"
         tabindex="-1"
@@ -218,7 +240,7 @@
         <div
             tabindex="0"
             role="button"
-            aria-label="Screenshots: paste, drop or browse for images"
+            aria-label="Attachments: paste, drop or browse for screenshots or files"
             x-on:keydown.enter.prevent="$refs.file.click()"
             x-bind:class="dragging
                 ? 'border-primary-500 bg-primary-50 dark:bg-primary-400/10'
@@ -227,7 +249,7 @@
         >
             <x-heroicon-o-photo class="h-6 w-6 text-gray-400" />
             <p class="text-sm text-gray-600 dark:text-gray-300">
-                <span x-text="dragging ? 'Drop the images here' : 'Paste or drop screenshots'"></span>
+                <span x-text="dragging ? 'Drop the files here' : 'Paste or drop screenshots or files'"></span>
             </p>
             <p class="text-xs text-gray-400">
                 Click here and press <kbd class="font-sans">⌘V</kbd> / <kbd class="font-sans">Ctrl+V</kbd>, or

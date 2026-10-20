@@ -1,0 +1,93 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Widens help request uploads from screenshots to a list of files, so a request
+ * or a reply can carry documents (PDF, Word, Excel) alongside the images it
+ * used to be limited to.
+ */
+return new class extends Migration
+{
+    /**
+     * The tables that gain the column, each keeping the position the old
+     * screenshot columns held.
+     *
+     * @var array<string, string>
+     */
+    private const TABLES = [
+        'help_requests' => 'comment',
+        'help_request_replies' => 'body',
+    ];
+
+    public function up(): void
+    {
+        foreach (self::TABLES as $table => $after) {
+            Schema::table($table, function (Blueprint $blueprint) use ($after): void {
+                $blueprint->json('attachments')->nullable()->after($after);
+            });
+
+            /* The single screenshot and the screenshot list each row may hold
+             * merge into one list, so nothing uploaded before this migration is lost. */
+            DB::table($table)
+                ->where(fn ($query) => $query->whereNotNull('screenshot_path')->orWhereNotNull('screenshot_paths'))
+                ->orderBy('id')
+                ->each(function (object $row) use ($table): void {
+                    $list = json_decode((string) $row->screenshot_paths, true);
+                    $paths = array_values(array_filter(
+                        [$row->screenshot_path, ...(is_array($list) ? $list : [])],
+                        fn (mixed $path): bool => is_string($path) && $path !== '',
+                    ));
+
+                    if ($paths !== []) {
+                        DB::table($table)
+                            ->where('id', $row->id)
+                            ->update(['attachments' => json_encode($paths)]);
+                    }
+                });
+
+            Schema::table($table, function (Blueprint $blueprint): void {
+                $blueprint->dropColumn(['screenshot_path', 'screenshot_paths']);
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        foreach (self::TABLES as $table => $after) {
+            Schema::table($table, function (Blueprint $blueprint) use ($after): void {
+                $blueprint->string('screenshot_path')->nullable()->after($after);
+                $blueprint->json('screenshot_paths')->nullable()->after('screenshot_path');
+            });
+
+            /* The first attachment goes back to the single column and the rest
+             * to the list, the shape the 1.1 screenshot fields used. */
+            DB::table($table)
+                ->whereNotNull('attachments')
+                ->orderBy('id')
+                ->each(function (object $row) use ($table): void {
+                    $attachments = json_decode((string) $row->attachments, true);
+
+                    if (! is_array($attachments) || $attachments === []) {
+                        return;
+                    }
+
+                    $rest = array_values(array_slice($attachments, 1));
+
+                    DB::table($table)
+                        ->where('id', $row->id)
+                        ->update([
+                            'screenshot_path' => reset($attachments),
+                            'screenshot_paths' => $rest === [] ? null : json_encode($rest),
+                        ]);
+                });
+
+            Schema::table($table, function (Blueprint $blueprint): void {
+                $blueprint->dropColumn('attachments');
+            });
+        }
+    }
+};
