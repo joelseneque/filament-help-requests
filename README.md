@@ -354,6 +354,12 @@ Follow these steps in each app that uses the package.
 
 ### Version notes
 
+**1.2.1**
+
+- Fix: `->settingsCluster()` now lists the settings page in that cluster's
+  navigation. Before, the page was routed under the cluster but missing from
+  its menu. No migrations, config or view changes.
+
 **1.2.0**
 
 - New migration `add_attachments_to_help_requests_tables` (step 2). It moves
