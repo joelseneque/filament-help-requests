@@ -72,6 +72,56 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Parley — the help chat
+    |--------------------------------------------------------------------------
+    |
+    | The widget's chat tab. It answers from the app's own help library: the
+    | markdown files in `knowledge_paths` (files starting with an underscore
+    | are the primer, read on every question). Questions it cannot answer are
+    | filed as internal "Help article" requests for somebody to write up.
+    |
+    | Without an API key the tab is not shown. `effort` trades thoroughness for
+    | speed and cost; `low` suits a help chat. `inline_kb` is how much of the
+    | library goes into every prompt; articles past it are listed by title and
+    | read on demand. `fallbacks` re-runs a question the model's safety checks
+    | decline on the model Anthropic recommends for that case.
+    |
+    */
+
+    'parley' => [
+        'enabled' => env('HELP_REQUESTS_PARLEY', true),
+        'name' => 'Parley',
+        'knowledge_paths' => [resource_path('help')],
+
+        'api_key' => env('PARLEY_ANTHROPIC_KEY', env('ANTHROPIC_API_KEY')),
+        'endpoint' => env('PARLEY_ANTHROPIC_ENDPOINT', 'https://api.anthropic.com/v1'),
+        'version' => '2023-06-01',
+        'model' => env('PARLEY_MODEL', 'claude-opus-5-5'),
+        'effort' => env('PARLEY_EFFORT', 'low'),
+        'max_tokens' => 8000,
+        'timeout' => 90,
+        'fallbacks' => true,
+        'inline_kb' => 150,
+
+        // Questions per conversation before Parley asks for a fresh chat, and
+        // per person per hour.
+        'max_questions' => 20,
+        'questions_per_hour' => 40,
+
+        // Each day starts a new chat; earlier ones are listed under Chats.
+        // The day is on this clock (null is the app's timezone), which
+        // HelpRequestsPlugin::parleyTimezone() can override per panel.
+        'timezone' => env('PARLEY_TIMEZONE'),
+
+        // A chat longer than this many messages is folded above its last few.
+        'condense_after' => 6,
+
+        // Also notify admins (as for a new request) when a gap is filed.
+        'notify_admins_of_gaps' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Attachment storage
     |--------------------------------------------------------------------------
     |

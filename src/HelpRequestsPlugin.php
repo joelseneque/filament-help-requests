@@ -11,6 +11,8 @@ use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Blade;
 use Joelseneque\HelpRequests\Filament\Pages\HelpRequestSettings;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
+use Joelseneque\HelpRequests\Parley\Contracts\ParleyTool;
+use Joelseneque\HelpRequests\Parley\Parley;
 use UnitEnum;
 
 class HelpRequestsPlugin implements Plugin
@@ -157,8 +159,7 @@ class HelpRequestsPlugin implements Plugin
 
     /**
      * The feedback categories shown as buttons in the widget, replacing the
-     * defaults ("Change this", "Something missing", "Looks broken",
-     * "Confusing", "This works well"). Pass `key => label` pairs or a list of
+     * defaults ("Bug", "Feature"). Pass `key => label` pairs or a list of
      * labels; pass an empty array to hide the choice.
      *
      * @param  array<int|string, string>|Closure(): array<int|string, string>  $categories
@@ -177,6 +178,78 @@ class HelpRequestsPlugin implements Plugin
     public function videoLinks(bool $condition = true): static
     {
         HelpRequests::useVideoLinks($condition);
+
+        return $this;
+    }
+
+    /**
+     * Offer Parley, the help chat, as the widget's first tab. On by default
+     * whenever an Anthropic API key is configured.
+     */
+    public function parley(bool $condition = true): static
+    {
+        Parley::enable($condition);
+
+        return $this;
+    }
+
+    /**
+     * What the chat calls itself. Defaults to "Parley".
+     */
+    public function parleyName(string $name): static
+    {
+        Parley::useName($name);
+
+        return $this;
+    }
+
+    /**
+     * The folders of markdown the chat answers from, replacing the config's
+     * `parley.knowledge_paths` (default `resources/help`).
+     *
+     * @param  list<string>  $paths
+     */
+    public function parleyKnowledgePaths(array $paths): static
+    {
+        Parley::useKnowledgePaths($paths);
+
+        return $this;
+    }
+
+    /**
+     * Lookups the chat may run in the app, as the person asking.
+     *
+     * @param  list<class-string<ParleyTool>|ParleyTool>  $tools
+     */
+    public function parleyTools(array $tools): static
+    {
+        Parley::useTools($tools);
+
+        return $this;
+    }
+
+    /**
+     * How the person asking is described to the chat. Defaults to their name
+     * and, with spatie/laravel-permission, their roles.
+     *
+     * @param  Closure(Authenticatable $user): string  $callback
+     */
+    public function describeParleyUserUsing(Closure $callback): static
+    {
+        Parley::describeUserUsing($callback);
+
+        return $this;
+    }
+
+    /**
+     * The clock Parley's days run on: a new chat starts each day, and the list
+     * of chats is grouped by day. Defaults to the app's timezone.
+     *
+     * @param  string|Closure(): string  $timezone
+     */
+    public function parleyTimezone(string|Closure $timezone): static
+    {
+        Parley::useTimezone($timezone);
 
         return $this;
     }

@@ -1,0 +1,66 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+use Joelseneque\HelpRequests\HelpRequests;
+
+return new class extends Migration
+{
+    /**
+     * Parley, the help chat: each conversation and every turn of it, and the
+     * link from a help request back to the chat that led to it.
+     */
+    public function up(): void
+    {
+        $usersTable = (new (HelpRequests::userModel()))->getTable();
+
+        Schema::create('parley_conversations', function (Blueprint $table) use ($usersTable): void {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained($usersTable)->nullOnDelete();
+            $table->string('page_url')->nullable();
+            $table->string('page_title')->nullable();
+            $table->timestamps();
+
+            $table->index(['user_id', 'updated_at']);
+        });
+
+        Schema::create('parley_messages', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('parley_conversation_id')->constrained()->cascadeOnDelete();
+            $table->string('role', 16);
+
+            // What the person sees. Null for a turn that only carries tool calls
+            // or their results, which is never drawn.
+            $table->longText('text')->nullable();
+
+            // The turn exactly as the model API sent or received it, replayed
+            // byte for byte on the next question: the history is append-only.
+            $table->longText('payload');
+
+            $table->json('meta')->nullable();
+            $table->tinyInteger('rating')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::table('help_requests', function (Blueprint $table): void {
+            // A request nobody raised by hand — Parley noting a question it could
+            // not answer. Kept out of the requester's own list.
+            $table->boolean('is_internal')->default(false)->after('category')->index();
+            $table->foreignId('parley_conversation_id')->nullable()->after('is_internal')
+                ->constrained('parley_conversations')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('help_requests', function (Blueprint $table): void {
+            $table->dropConstrainedForeignId('parley_conversation_id');
+            $table->dropIndex(['is_internal']);
+            $table->dropColumn('is_internal');
+        });
+
+        Schema::dropIfExists('parley_messages');
+        Schema::dropIfExists('parley_conversations');
+    }
+};

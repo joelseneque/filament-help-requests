@@ -2,6 +2,7 @@
 
 namespace Joelseneque\HelpRequests\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,8 @@ use Joelseneque\HelpRequests\Models\Concerns\HasAttachments;
  * @property string|null $page_url
  * @property string|null $page_title
  * @property string|null $category
+ * @property bool $is_internal
+ * @property int|null $parley_conversation_id
  * @property string $comment
  * @property list<string>|null $attachments
  * @property string|null $video_url
@@ -41,6 +44,8 @@ class HelpRequest extends Model
         'page_url',
         'page_title',
         'category',
+        'is_internal',
+        'parley_conversation_id',
         'comment',
         'attachments',
         'video_url',
@@ -61,6 +66,7 @@ class HelpRequest extends Model
         return [
             'status' => HelpRequestStatus::class,
             'attachments' => 'array',
+            'is_internal' => 'boolean',
             'resolved_at' => 'datetime',
             'github_issue_number' => 'integer',
             'github_synced_at' => 'datetime',
@@ -80,6 +86,26 @@ class HelpRequest extends Model
     public function replies(): HasMany
     {
         return $this->hasMany(HelpRequestReply::class)->orderBy('created_at');
+    }
+
+    /**
+     * The Parley chat this request came out of, if it did.
+     */
+    public function parleyConversation(): BelongsTo
+    {
+        return $this->belongsTo(ParleyConversation::class);
+    }
+
+    /**
+     * Requests the requester raised themselves — what "My Requests" lists.
+     * Internal ones, such as a question Parley could not answer, are notes
+     * for the team.
+     *
+     * @param  Builder<HelpRequest>  $query
+     */
+    public function scopeRaisedByRequester(Builder $query): void
+    {
+        $query->where('is_internal', false);
     }
 
     public function categoryLabel(): ?string

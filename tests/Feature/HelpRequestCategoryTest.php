@@ -15,18 +15,19 @@ beforeEach(function (): void {
     Mail::fake();
 });
 
-it('offers the default feedback categories', function () {
+it('offers bug and feature by default', function () {
     $this->actingAs(User::factory()->create());
 
     Livewire::test(HelpRequestWidget::class)
-        ->assertSee(['Change this', 'Something missing', 'Looks broken', 'Confusing', 'This works well']);
+        ->assertSee(['Bug', 'Feature'])
+        ->assertDontSee(['Something missing', 'This works well']);
 });
 
 it('stores the chosen category and the page name', function () {
     $this->actingAs(User::factory()->create());
 
     Livewire::test(HelpRequestWidget::class)
-        ->set('category', 'confusing')
+        ->set('category', 'bug')
         ->set('pageTitle', 'Deals — record')
         ->set('comment', 'I cannot tell which total is which.')
         ->call('submit')
@@ -35,9 +36,14 @@ it('stores the chosen category and the page name', function () {
 
     $request = HelpRequest::query()->sole();
 
-    expect($request->category)->toBe('confusing')
-        ->and($request->categoryLabel())->toBe('Confusing')
+    expect($request->category)->toBe('bug')
+        ->and($request->categoryLabel())->toBe('Bug')
         ->and($request->page_title)->toBe('Deals — record');
+});
+
+it('still reads the categories offered before bug and feature', function () {
+    expect(HelpRequest::factory()->make(['category' => 'confusing'])->categoryLabel())->toBe('Confusing')
+        ->and(HelpRequest::factory()->make(['category' => 'works_well'])->categoryLabel())->toBe('This works well');
 });
 
 it('keeps the category optional', function () {

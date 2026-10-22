@@ -4,6 +4,7 @@ namespace Joelseneque\HelpRequests;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Joelseneque\HelpRequests\Console\Commands\GitHubIntegrationStatusCommand;
+use Joelseneque\HelpRequests\Console\Commands\ParleyLibraryCommand;
 use Joelseneque\HelpRequests\Console\Commands\SyncGitHubIssuesCommand;
 use Joelseneque\HelpRequests\Livewire\HelpRequestWidget;
 use Livewire\Livewire;
@@ -28,9 +29,11 @@ class HelpRequestsServiceProvider extends PackageServiceProvider
                 'add_video_url_to_help_requests_table',
                 'add_screenshot_paths_to_help_requests_tables',
                 'add_attachments_to_help_requests_tables',
+                'create_parley_tables',
             ])
             ->hasCommands([
                 GitHubIntegrationStatusCommand::class,
+                ParleyLibraryCommand::class,
                 SyncGitHubIssuesCommand::class,
             ]);
     }
