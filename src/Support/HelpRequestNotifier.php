@@ -83,7 +83,8 @@ class HelpRequestNotifier
     {
         $recipient = $helpRequest->user;
 
-        if ($recipient === null || $recipient->is($reply->user)) {
+        // An internal request was filed for the team, not by the person it names.
+        if ($recipient === null || $helpRequest->is_internal || $recipient->is($reply->user)) {
             return;
         }
 
@@ -107,7 +108,7 @@ class HelpRequestNotifier
     {
         $recipient = $helpRequest->user;
 
-        if ($recipient === null) {
+        if ($recipient === null || $helpRequest->is_internal) {
             return;
         }
 

@@ -11,6 +11,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
 use Joelseneque\HelpRequests\Models\HelpRequest;
+use Joelseneque\HelpRequests\Parley\Parley;
 use Symfony\Component\Mime\MimeTypes;
 
 /**
@@ -22,6 +23,13 @@ use Symfony\Component\Mime\MimeTypes;
  */
 class HelpRequests
 {
+    /**
+     * The category Parley files a question it could not answer under. Never
+     * offered in the widget: the request is internal, a note to whoever keeps
+     * the help library that an article is missing.
+     */
+    public const HELP_ARTICLE_CATEGORY = 'help_article';
+
     protected static ?Closure $authorizeUsing = null;
 
     protected static ?Closure $authorizeSettingsUsing = null;
@@ -92,6 +100,20 @@ class HelpRequests
     public static function defaultCategories(): array
     {
         return [
+            'bug' => 'Bug',
+            'feature' => 'Feature',
+        ];
+    }
+
+    /**
+     * Labels for the five categories offered before 2.0, so requests filed
+     * under them still read the way they were written.
+     *
+     * @return array<string, string>
+     */
+    public static function legacyCategoryLabels(): array
+    {
+        return [
             'change' => 'Change this',
             'missing' => 'Something missing',
             'broken' => 'Looks broken',
@@ -126,7 +148,33 @@ class HelpRequests
             return null;
         }
 
-        return static::categories()[$key] ?? Str::headline($key);
+        return static::categories()[$key]
+            ?? ($key === static::HELP_ARTICLE_CATEGORY ? 'Help article' : null)
+            ?? static::legacyCategoryLabels()[$key]
+            ?? Str::headline($key);
+    }
+
+    /**
+     * What the admin list can be filtered by: the categories offered now, the
+     * help article category, and any other key requests are actually stored
+     * under, so narrowing the offered list never strands old requests.
+     *
+     * @return array<string, string>
+     */
+    public static function categoryFilterOptions(): array
+    {
+        $stored = HelpRequest::query()
+            ->whereNotNull('category')
+            ->distinct()
+            ->pluck('category')
+            ->all();
+
+        return collect(array_keys(static::categories()))
+            ->push(static::HELP_ARTICLE_CATEGORY)
+            ->merge($stored)
+            ->unique()
+            ->mapWithKeys(fn (string $key): array => [$key => static::categoryLabel($key)])
+            ->all();
     }
 
     /**
@@ -385,5 +433,7 @@ class HelpRequests
         static::$panelId = null;
         static::$categories = null;
         static::$videoLinksEnabled = null;
+
+        Parley::flush();
     }
 }
