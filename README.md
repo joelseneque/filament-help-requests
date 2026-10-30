@@ -288,6 +288,11 @@ choose which repositories the app can access, then pick the repository for
 this site and save. The connection is stored in this site's database, so
 each environment (local, staging, production) connects separately.
 
+New issues get the labels under **Default labels**, which starts as
+`help-request` so issues raised from the app are easy to filter. Add more
+(for example `AI`) or clear it on the same page. Create the labels in the
+repository first.
+
 ### Queue and schedule
 
 Automatic issue creation runs on the queue, so a worker must be running. An

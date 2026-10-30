@@ -45,6 +45,16 @@ it('saves the issue creation settings from the page', function (): void {
     expect($settings->isGithubConnected())->toBeTrue();
 });
 
+it('starts a new settings row with the help-request label', function (): void {
+    expect(HelpRequestSetting::current()->github_default_labels)->toBe(['help-request']);
+});
+
+it('keeps cleared default labels cleared', function (): void {
+    HelpRequestSetting::current()->update(['github_default_labels' => null]);
+
+    expect(HelpRequestSetting::current()->github_default_labels)->toBeNull();
+});
+
 it('offers only the repositories the installation can reach', function (): void {
     makeGitHubSettings();
 
