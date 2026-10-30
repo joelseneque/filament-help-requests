@@ -69,7 +69,7 @@ it('resolves the request without a closing note when the issue is closed with a 
         fn (HelpRequestResolvedNotification $n): bool => $n->comment === null);
 
     // The comment thread is never read — closing must not call the comments API.
-    Http::assertNothingSent();
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/comments'));
 });
 
 it('closes the request without a note', function (): void {

@@ -243,7 +243,7 @@ it('closes the github issue as not planned when the request is closed', function
 
     $this->github->pushStatus($helpRequest);
 
-    Http::assertSent(fn ($request) => $request['state_reason'] === 'not_planned');
+    Http::assertSent(fn ($request) => ($request->data()['state_reason'] ?? null) === 'not_planned');
 });
 
 it('skips pushing when github already matches the local status', function (): void {
@@ -334,4 +334,105 @@ it('tells the user to pick a repository once installed', function (): void {
 
     expect($result['ok'])->toBeFalse();
     expect($result['message'])->toContain('no repository has been selected');
+});
+
+it('swaps to the done label when the app closes the issue', function (): void {
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'open',
+        'status' => HelpRequestStatus::Resolved,
+    ]);
+
+    Http::fake(['api.github.com/*' => Http::response(['number' => 42, 'state' => 'closed'])]);
+
+    $this->github->pushStatus($helpRequest);
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/app/issues/42/labels')
+        && $request['labels'] === ['help-request-done']);
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with($request->url(), '/issues/42/labels/help-request'));
+});
+
+it('swaps back to the open label when the app reopens the issue', function (): void {
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'closed',
+        'status' => HelpRequestStatus::Open,
+    ]);
+
+    Http::fake(['api.github.com/*' => Http::response(['number' => 42, 'state' => 'open'])]);
+
+    $this->github->pushStatus($helpRequest);
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/issues/42/labels')
+        && $request['labels'] === ['help-request']);
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with($request->url(), '/issues/42/labels/help-request-done'));
+});
+
+it('swaps labels when the issue is closed on github', function (): void {
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'open',
+    ]);
+
+    Http::fake();
+
+    $this->github->applyIssue($helpRequest, ['number' => 42, 'state' => 'closed', 'state_reason' => 'completed']);
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['help-request-done']);
+});
+
+it('leaves labels alone when the issue state has not changed', function (): void {
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'closed',
+        'status' => HelpRequestStatus::Resolved,
+    ]);
+
+    Http::fake();
+
+    $this->github->applyIssue($helpRequest, ['number' => 42, 'state' => 'closed', 'state_reason' => 'completed']);
+
+    Http::assertNothingSent();
+});
+
+it('skips a label that is configured as null', function (): void {
+    config(['help-requests.github.labels.open' => null]);
+
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'open',
+    ]);
+
+    Http::fake();
+
+    $this->github->applyIssue($helpRequest, ['number' => 42, 'state' => 'closed']);
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['help-request-done']);
+});
+
+it('still reports the status push when the label update fails', function (): void {
+    $helpRequest = HelpRequest::factory()->create([
+        'github_issue_number' => 42,
+        'github_repository' => 'acme/app',
+        'github_issue_state' => 'open',
+        'status' => HelpRequestStatus::Resolved,
+    ]);
+
+    Http::fake([
+        'api.github.com/repos/acme/app/issues/42/labels*' => Http::response(['message' => 'Validation Failed'], 422),
+        'api.github.com/*' => Http::response(['number' => 42, 'state' => 'closed']),
+    ]);
+
+    expect($this->github->pushStatus($helpRequest)['ok'])->toBeTrue();
+    expect($helpRequest->refresh()->github_issue_state)->toBe('closed');
 });

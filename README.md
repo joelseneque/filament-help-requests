@@ -197,7 +197,7 @@ from other hosts are shown as a plain link rather than an embedded player.
 | `storage.accepted_file_types` | images, PDF, Word, Excel, CSV, text | MIME types users and admins may attach. Uploads must match by content and by file extension. Don't add HTML, SVG or scripts: served from your domain they would run as your site. |
 | `branding.name` / `branding.logo_url` | `APP_NAME` / none | Shown in emails and GitHub issue text. |
 | `routes.*` | `webhooks/github`, `github/connect`, `github/callback` | Route paths and install-route middleware. |
-| `github.*` | `GITHUB_APP_*` env vars | GitHub App credentials; `schedule_sync` toggles the hourly poll. |
+| `github.*` | `GITHUB_APP_*` env vars | GitHub App credentials; `schedule_sync` toggles the hourly poll; `labels.open` / `labels.done` (`help-request` / `help-request-done`) are swapped as the issue closes and reopens. |
 
 Admins who get the in-app alert: the user whose email matches `recipient`,
 otherwise everyone with `admin_role`.
@@ -292,6 +292,12 @@ New issues get the labels under **Default labels**, which starts as
 `help-request` so issues raised from the app are easy to filter. Add more
 (for example `AI`) or clear it on the same page. Create the labels in the
 repository first.
+
+When an issue closes (from the app, by hand or by a merged PR that fixes it),
+`help-request` is swapped for `help-request-done`; reopening swaps it back.
+Change or switch off either label with `github.labels.open` /
+`github.labels.done` (set to `null`). A failed label update is logged and
+never blocks the status change.
 
 ### Queue and schedule
 

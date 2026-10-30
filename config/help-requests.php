@@ -153,6 +153,14 @@ return [
 
         // Hourly poll of linked issues, in case a webhook delivery is missed.
         'schedule_sync' => true,
+
+        // Swapped on the issue when it closes, and back when it reopens, so
+        // tools reading the repo can tell finished requests apart. Set either
+        // to null to leave that label alone.
+        'labels' => [
+            'open' => 'help-request',
+            'done' => 'help-request-done',
+        ],
     ],
 
 ];
