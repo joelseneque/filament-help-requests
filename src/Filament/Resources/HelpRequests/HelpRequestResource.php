@@ -26,6 +26,14 @@ class HelpRequestResource extends Resource
 
     protected static ?string $slug = 'help-requests';
 
+    /**
+     * Help requests are about the app, not about a tenant's records, so a
+     * multi-tenant panel lists them all. Declared here rather than inherited:
+     * a resource that omits it shares the base class's storage, and any other
+     * resource calling `scopeToTenant()` would flip this one too.
+     */
+    protected static bool $isScopedToTenant = false;
+
     public static function table(Table $table): Table
     {
         return HelpRequestsTable::configure($table);

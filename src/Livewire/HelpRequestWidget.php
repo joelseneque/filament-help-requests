@@ -6,7 +6,9 @@ use Closure;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
@@ -14,6 +16,12 @@ use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Jobs\CreateGitHubIssueForHelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequestSetting;
+use Joelseneque\HelpRequests\Models\ParleyConversation;
+use Joelseneque\HelpRequests\Models\ParleyMessage;
+use Joelseneque\HelpRequests\Parley\AskParley;
+use Joelseneque\HelpRequests\Parley\KnowledgeLibrary;
+use Joelseneque\HelpRequests\Parley\Parley;
+use Joelseneque\HelpRequests\Parley\RecordHelpArticleGap;
 use Joelseneque\HelpRequests\Services\GitHubIssueService;
 use Joelseneque\HelpRequests\Support\HelpRequestNotifier;
 use Livewire\Attributes\Computed;
@@ -21,10 +29,11 @@ use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use RuntimeException;
 
 /**
- * The floating "?" button on every panel page: raise a request, and read and
- * reply to your own.
+ * The floating "?" button on every panel page: ask Parley, raise a request,
+ * and read and reply to your own.
  */
 class HelpRequestWidget extends Component
 {
@@ -53,6 +62,33 @@ class HelpRequestWidget extends Component
     public string $category = '';
 
     public string $videoUrl = '';
+
+    /**
+     * The Parley conversation on screen. Null until the first question.
+     */
+    public ?int $conversationId = null;
+
+    /**
+     * The conversation a request being written came out of, so the request
+     * carries the chat with it.
+     */
+    public ?int $requestConversationId = null;
+
+    public string $parleyError = '';
+
+    /**
+     * Whether the chat tab is showing the list of earlier chats instead of the
+     * one in view.
+     */
+    public bool $showingChats = false;
+
+    /**
+     * Help articles about the page the widget was opened on, offered as
+     * starting questions on an empty chat.
+     *
+     * @var list<string>
+     */
+    public array $starterQuestions = [];
 
     /**
      * The panel's brand name, stripped from `document.title` so the widget can
@@ -180,6 +216,11 @@ class HelpRequestWidget extends Component
     {
         $this->brandName = (string) (Filament::getCurrentPanel()?->getBrandName() ?? '');
 
+        if (Parley::isEnabled()) {
+            $this->tab = 'parley';
+            $this->conversationId = $this->resumableConversationId();
+        }
+
         $id = (int) request()->query('help_request');
 
         if ($id <= 0) {
@@ -189,6 +230,7 @@ class HelpRequestWidget extends Component
         $isOwn = HelpRequest::query()
             ->whereKey($id)
             ->where('user_id', auth()->id())
+            ->raisedByRequester()
             ->exists();
 
         if (! $isOwn) {
@@ -221,6 +263,7 @@ class HelpRequestWidget extends Component
             'page_url' => $this->pageUrl !== '' ? $this->pageUrl : null,
             'page_title' => $this->pageTitle !== '' ? $this->pageTitle : null,
             'category' => $this->category !== '' ? $this->category : null,
+            'parley_conversation_id' => $this->ownConversation($this->requestConversationId)?->getKey(),
             'video_url' => HelpRequests::videoLinksEnabled() && trim($this->videoUrl) !== '' ? trim($this->videoUrl) : null,
             'comment' => $this->withMarkerNotes($this->comment, $this->screenshots, $this->screenshotNotes),
             'attachments' => $this->storeUploads($this->screenshots),
@@ -233,7 +276,7 @@ class HelpRequestWidget extends Component
             CreateGitHubIssueForHelpRequest::dispatch($helpRequest);
         }
 
-        $this->reset('comment', 'screenshots', 'screenshotNotes', 'category', 'videoUrl');
+        $this->reset('comment', 'screenshots', 'screenshotNotes', 'category', 'videoUrl', 'requestConversationId');
         $this->tab = 'mine';
 
         unset($this->myRequests);
@@ -249,6 +292,7 @@ class HelpRequestWidget extends Component
     {
         $helpRequest = HelpRequest::query()
             ->where('user_id', auth()->id())
+            ->raisedByRequester()
             ->findOrFail($helpRequestId);
 
         $this->replyScreenshots[$helpRequestId] = array_filter($this->replyScreenshots[$helpRequestId] ?? []);
@@ -290,6 +334,277 @@ class HelpRequestWidget extends Component
             ->title('Reply sent')
             ->success()
             ->send();
+    }
+
+    /**
+     * Ask Parley a question. The page is captured by the browser just before,
+     * as it is for a request.
+     */
+    public function ask(string $question): void
+    {
+        $this->parleyError = '';
+        $question = trim($question);
+
+        if (! Parley::isEnabled() || mb_strlen($question) < 2) {
+            return;
+        }
+
+        $question = Str::limit($question, 2000, '');
+        $conversation = $this->ownConversation($this->conversationId);
+
+        if ($conversation && $conversation->questionCount() >= (int) config('help-requests.parley.max_questions', 20)) {
+            $this->parleyError = 'This chat is getting long. Start a new chat to keep going.';
+
+            return;
+        }
+
+        $limiterKey = 'help-requests:parley:'.auth()->id();
+
+        if (RateLimiter::tooManyAttempts($limiterKey, (int) config('help-requests.parley.questions_per_hour', 40))) {
+            $this->parleyError = 'That\'s a lot of questions in an hour. Try again a little later, or raise a help request.';
+
+            return;
+        }
+
+        RateLimiter::hit($limiterKey, 3600);
+
+        $conversation ??= ParleyConversation::create(['user_id' => auth()->id()]);
+        $this->conversationId = $conversation->getKey();
+
+        try {
+            AskParley::make()->ask(
+                $conversation,
+                auth()->user(),
+                $question,
+                $this->pageUrl !== '' ? $this->pageUrl : null,
+                $this->pageTitle !== '' ? $this->pageTitle : null,
+            );
+        } catch (RuntimeException $exception) {
+            report($exception);
+
+            $this->parleyError = Parley::name().' couldn\'t answer just now. Try again, or raise a help request.';
+        }
+
+        unset($this->parleyMessages);
+    }
+
+    public function newChat(): void
+    {
+        $this->conversationId = null;
+        $this->parleyError = '';
+        $this->showingChats = false;
+
+        unset($this->parleyMessages);
+    }
+
+    /**
+     * Carry on an earlier chat from the list.
+     */
+    public function openConversation(int $conversationId): void
+    {
+        if (! $this->ownConversation($conversationId)) {
+            return;
+        }
+
+        $this->conversationId = $conversationId;
+        $this->parleyError = '';
+        $this->showingChats = false;
+
+        unset($this->parleyMessages);
+    }
+
+    /**
+     * The person's chats, newest first, grouped under the day they were last
+     * used: Today, Yesterday, then the date.
+     *
+     * @return array<string, list<array{id: int, title: string, time: string}>>
+     */
+    #[Computed]
+    public function chatHistory(): array
+    {
+        $timezone = Parley::timezone();
+        $today = now($timezone)->startOfDay();
+
+        return ParleyConversation::query()
+            ->where('user_id', auth()->id())
+            ->whereHas('messages', fn (Builder $query): Builder => $query->where('role', ParleyMessage::ROLE_USER)->whereNotNull('text'))
+            ->addSelect(['first_question' => ParleyMessage::query()
+                ->select('text')
+                ->whereColumn('parley_conversation_id', 'parley_conversations.id')
+                ->where('role', ParleyMessage::ROLE_USER)
+                ->whereNotNull('text')
+                ->orderBy('id')
+                ->limit(1)])
+            ->latest('updated_at')
+            ->limit(40)
+            ->get()
+            ->groupBy(function (ParleyConversation $conversation) use ($timezone, $today): string {
+                $day = $conversation->updated_at->copy()->setTimezone($timezone)->startOfDay();
+
+                return match (true) {
+                    $day->equalTo($today) => 'Today',
+                    $day->equalTo($today->copy()->subDay()) => 'Yesterday',
+                    default => $day->format($day->year === $today->year ? 'D j M' : 'D j M Y'),
+                };
+            })
+            ->map(fn ($conversations): array => $conversations->map(fn (ParleyConversation $conversation): array => [
+                'id' => $conversation->getKey(),
+                'title' => Str::limit((string) $conversation->getAttribute('first_question'), 60),
+                'time' => $conversation->updated_at->copy()->setTimezone($timezone)->format('g:i a'),
+            ])->values()->all())
+            ->all();
+    }
+
+    /**
+     * What the chat in view is: today's, or the day an earlier one was had.
+     */
+    #[Computed]
+    public function conversationLabel(): string
+    {
+        $conversation = $this->ownConversation($this->conversationId);
+
+        if ($conversation === null) {
+            return 'New chat';
+        }
+
+        $timezone = Parley::timezone();
+        $day = $conversation->created_at->copy()->setTimezone($timezone);
+
+        return $day->isSameDay(now($timezone)) ? "Today's chat" : 'Chat from '.$day->format('D j M');
+    }
+
+    /**
+     * Thumbs up or down on an answer. Down also files the question as a gap
+     * in the help library: an answer somebody found unhelpful is the
+     * clearest sign an article is missing or wrong.
+     */
+    public function rateAnswer(int $messageId, int $rating): void
+    {
+        $message = $this->ownAnswer($messageId);
+        $rating = $rating >= 0 ? 1 : -1;
+
+        if ($message === null || $message->rating === $rating) {
+            return;
+        }
+
+        $message->update(['rating' => $rating]);
+
+        if ($rating < 0 && ! isset($message->meta['help_article_request_id'])) {
+            $question = $message->conversation->messages()
+                ->where('id', '<', $message->getKey())
+                ->where('role', ParleyMessage::ROLE_USER)
+                ->whereNotNull('text')
+                ->latest('id')
+                ->value('text');
+
+            $gap = RecordHelpArticleGap::record(
+                $message->conversation,
+                (string) $question,
+                'The answer was marked unhelpful. '.Parley::name().' said: '.Str::limit((string) $message->text, 600),
+            );
+
+            $message->update(['meta' => [...($message->meta ?? []), 'help_article_request_id' => $gap->getKey()]]);
+        }
+
+        unset($this->parleyMessages);
+    }
+
+    /**
+     * Move from the chat to the request form, filled in with what Parley
+     * suggested — or, with no suggestion, the last question asked.
+     */
+    public function raiseRequest(?int $messageId = null): void
+    {
+        $conversation = $this->ownConversation($this->conversationId);
+        $suggestion = $messageId ? $this->ownAnswer($messageId)?->suggestedRequest() : null;
+
+        if ($suggestion) {
+            $this->comment = $suggestion['summary'];
+            $this->category = $suggestion['type'] ?? '';
+        } elseif ($conversation && $this->comment === '') {
+            $this->comment = (string) $conversation->messages()
+                ->where('role', ParleyMessage::ROLE_USER)
+                ->whereNotNull('text')
+                ->latest('id')
+                ->value('text');
+        }
+
+        $this->requestConversationId = $conversation?->getKey();
+        $this->tab = 'new';
+    }
+
+    /**
+     * @return Collection<int, ParleyMessage>
+     */
+    #[Computed]
+    public function parleyMessages(): Collection
+    {
+        return $this->ownConversation($this->conversationId)?->visibleMessages()->get()
+            ?? new Collection;
+    }
+
+    #[Computed]
+    public function parleyName(): string
+    {
+        return Parley::name();
+    }
+
+    #[Computed]
+    public function parleyEnabled(): bool
+    {
+        return Parley::isEnabled();
+    }
+
+    /**
+     * Questions to start an empty chat with: the titles of the articles about
+     * the page the widget is on. Read from the library once, when the chat
+     * tab is first drawn on a page.
+     */
+    public function loadStarterQuestions(string $path): void
+    {
+        if (! Parley::isEnabled()) {
+            return;
+        }
+
+        $this->starterQuestions = KnowledgeLibrary::make()
+            ->aboutPath((string) parse_url($path, PHP_URL_PATH), auth()->user())
+            ->take(3)
+            ->pluck('title')
+            ->all();
+    }
+
+    protected function ownConversation(?int $id): ?ParleyConversation
+    {
+        if (! $id) {
+            return null;
+        }
+
+        return ParleyConversation::query()->where('user_id', auth()->id())->find($id);
+    }
+
+    protected function ownAnswer(int $messageId): ?ParleyMessage
+    {
+        return ParleyMessage::query()
+            ->whereKey($messageId)
+            ->where('role', ParleyMessage::ROLE_ASSISTANT)
+            ->whereNotNull('text')
+            ->whereHas('conversation', fn (Builder $query): Builder => $query->where('user_id', auth()->id()))
+            ->first();
+    }
+
+    /**
+     * Today's chat carries on when the widget is opened again — on the next
+     * page, or after a reload. Each day starts a fresh one; yesterday's is in
+     * the list of chats. "Today" is on the Parley clock, so a chat at 9am in
+     * Melbourne is not yesterday's because the server keeps UTC.
+     */
+    protected function resumableConversationId(): ?int
+    {
+        return ParleyConversation::query()
+            ->where('user_id', auth()->id())
+            ->where('updated_at', '>=', now(Parley::timezone())->startOfDay()->setTimezone(config('app.timezone')))
+            ->latest('updated_at')
+            ->value('id');
     }
 
     /**
@@ -358,6 +673,7 @@ class HelpRequestWidget extends Component
     {
         $requests = HelpRequest::query()
             ->where('user_id', auth()->id())
+            ->raisedByRequester()
             ->with(['replies.user'])
             ->latest()
             ->limit(20)
@@ -372,6 +688,7 @@ class HelpRequestWidget extends Component
         if ($this->highlightRequestId && ! $requests->contains('id', $this->highlightRequestId)) {
             $linked = HelpRequest::query()
                 ->where('user_id', auth()->id())
+                ->raisedByRequester()
                 ->with(['replies.user'])
                 ->find($this->highlightRequestId);
 

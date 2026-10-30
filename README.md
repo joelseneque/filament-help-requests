@@ -2,14 +2,19 @@
 
 A drop-in help desk for Filament v5 panels.
 
-- **Floating help button** on every panel page. Users pick what kind of
-  feedback it is ("Looks broken", "Confusing", …), describe it, and can attach
+- **Parley, the help chat** — the widget's first tab. People ask how to do
+  something and get an answer from your app's own help library. When it
+  can't answer, it says so and files the question for you to write up; when
+  something sounds broken, it offers to turn the chat into a help request.
+  See [Parley](#parley-the-help-chat).
+- **Floating help button** on every panel page. Users pick whether it is a
+  bug or a feature request, describe it, and can attach
   up to 5 screenshots or files (PDF, Word, Excel, CSV, text) and a Loom video.
   Files keep their original name (made URL-safe). Screenshots can be pasted or dropped
   in, then marked with numbered pins ("mark where it goes wrong"); the pins are
   drawn onto the image and each pin's note is added to the request text. The page
   they were on is captured automatically.
-- **"My Requests" tab** in the same widget: a collapsible list of their requests
+- **"My requests" tab** in the same widget: a collapsible list of their requests
   (one thread open at a time) where they read replies and reply back.
 - **Admin triage** — a resource to list, filter, reply (with attachments),
   change status and delete requests.
@@ -112,11 +117,11 @@ Users can tag a request with one of these buttons (optional):
 
 | Key | Label |
 | --- | --- |
-| `change` | Change this |
-| `missing` | Something missing |
-| `broken` | Looks broken |
-| `confusing` | Confusing |
-| `works_well` | This works well |
+| `bug` | Bug |
+| `feature` | Feature |
+
+Requests filed under the five categories offered before 2.0 (`change`,
+`missing`, `broken`, `confusing`, `works_well`) keep their old labels.
 
 Replace them with your own list:
 
@@ -172,6 +177,114 @@ Other options live in `config/help-requests.php` under `video`:
 
 Links must be `https` and on an allowed host (subdomains included). Links
 from other hosts are shown as a plain link rather than an embedded player.
+
+## Parley, the help chat
+
+Parley is the widget's **Ask Parley** tab. It answers questions about your
+app from a help library you write, and it is shown only when an Anthropic API
+key is configured (`PARLEY_ANTHROPIC_KEY`, falling back to
+`ANTHROPIC_API_KEY`).
+
+### The help library
+
+The library is markdown in your app's repository, `resources/help` by default,
+so it is written next to the code it describes and deployed with it.
+
+```
+resources/help/
+├── _about.md                 # the primer: read on every question
+├── _glossary.md              # also primer (any file starting with _)
+├── quotes/
+│   └── sending-a-quote.md    # an article, slug "quotes/sending-a-quote"
+└── approving-timesheets.md
+```
+
+- **The primer** (`_*.md`) says what the app is, who uses it, and the words
+  your business uses. Write it first: with a primer and no articles Parley
+  can already tell people where things are, from the panel's navigation.
+- **An article** answers one question. Optional front matter:
+
+  ```markdown
+  ---
+  title: How do I send a quote?
+  summary: Emailing a quote to the client from the quote's page.
+  pages: ['*/quotes', '*/quotes/*']
+  can: [send_quotes]
+  ---
+
+  1. Open the quote. ...
+  ```
+
+  `title` defaults to the first `#` heading; phrase it as the question, because
+  articles about the current page are offered as starting questions.
+  `pages` are URL path patterns (`*` wildcards, no leading slash) the article
+  is about. `can` hides the article from anyone who lacks all of the listed
+  abilities (`$user->can()`).
+
+Up to `parley.inline_kb` (150 KB) of articles go into every prompt and are
+cached; anything past that is listed by title for Parley to open on demand.
+Run `php artisan help-requests:parley` to see the library as Parley reads it,
+and the questions waiting for an article.
+
+### What Parley knows
+
+- The primer and the articles the person may read.
+- **The screens they can open**, read from the panel's navigation, so it can
+  say where something is and link to it.
+- Who is asking: their name and, with spatie/laravel-permission, their roles
+  (`->describeParleyUserUsing()` replaces this).
+- The page they asked from.
+
+It cannot see records. Give it lookups with `->parleyTools([...])`: classes
+implementing `Joelseneque\HelpRequests\Parley\Contracts\ParleyTool`. A tool
+runs as the person asking, so query through your app's scoped queries and
+policies.
+
+### When it can't answer
+
+Parley is told to say so rather than guess, and to file the question. The
+question becomes an **internal help request** of type **Help article**,
+linked to the chat: it is in the admin list (filter **Raised by → Parley**),
+goes to GitHub when issues are raised automatically, and never appears in the
+asker's own list or emails them. More gaps in the same chat are added to it as
+replies. A thumbs down on an answer files one too. Write the article, then
+resolve the request.
+
+### Chats
+
+Each day starts a new chat; reopening the widget the same day carries on
+today's. **Chats** lists earlier ones grouped by day (Today, Yesterday, then
+the date), and any of them can be opened and continued. **New chat** starts
+a fresh one at any time. Once a chat passes `parley.condense_after` messages
+(6), the earlier ones fold into a list of their questions, with **Show all**
+to open them.
+
+The day runs on `->parleyTimezone()` (a string or a closure, e.g. the current
+tenant's timezone), then `parley.timezone`, then the app's timezone.
+
+### Turning a chat into a request
+
+When someone describes a bug or wants a feature, Parley offers a **Raise bug
+request** button that opens the request form filled in. "Still stuck? Raise a
+help request" does the same from any chat. The request carries the chat, shown
+on its admin page.
+
+### Options
+
+```php
+HelpRequestsPlugin::make()
+    ->parley()                                   // false hides the tab
+    ->parleyName('Parley')
+    ->parleyKnowledgePaths([resource_path('help')])
+    ->parleyTools([MyOpenJobs::class])
+    ->parleyTimezone('Australia/Melbourne')
+    ->describeParleyUserUsing(fn (User $user): string => "{$user->name}, {$user->position}")
+```
+
+The model, effort, limits and key are under `parley` in the config. The
+default model is `claude-opus-5-5` at `low` effort. A question the model's
+safety checks decline is re-run on Anthropic's recommended fallback model
+(`parley.fallbacks`).
 
 ### Linking to the widget
 
@@ -355,9 +468,25 @@ Follow these steps in each app that uses the package.
    integration.
 
 7. **Smoke test:** open a panel page, send a help request from the **?**
-   button, reply to it from the admin resource and from **My Requests**.
+   button, reply to it from the admin resource and from **My requests**.
 
 ### Version notes
+
+**2.0.0**
+
+- New migration `create_parley_tables` (step 2): the chat's conversations
+  and messages, and `is_internal` + `parley_conversation_id` on
+  `help_requests`.
+- New config section `parley` (step 3). Set `PARLEY_ANTHROPIC_KEY` (or
+  `ANTHROPIC_API_KEY`) to show the chat; without one the widget is as before.
+- **The default categories are now Bug and Feature.** Old requests keep their
+  labels. Pass `->categories([...])` to keep the old five.
+- The admin resource declares `$isScopedToTenant = false`, so it lists every
+  request on a multi-tenant panel instead of failing to scope.
+- New widget markup and the view `components/parley-transcript`: rebuild the
+  theme (step 5) and re-diff overridden views (step 4).
+- Add a `resources/help/_about.md` to your app — see
+  [Parley](#parley-the-help-chat).
 
 **1.2.1**
 

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\HelpRequest;
+use Joelseneque\HelpRequests\Parley\Parley;
 
 class HelpRequestsTable
 {
@@ -23,7 +24,9 @@ class HelpRequestsTable
             ->columns([
                 TextColumn::make('requester')
                     ->label('From')
-                    ->state(fn (HelpRequest $record): string => HelpRequests::userName($record->user))
+                    ->state(fn (HelpRequest $record): string => $record->is_internal
+                        ? Parley::name().', asked by '.HelpRequests::userName($record->user)
+                        : HelpRequests::userName($record->user))
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas(
                         'user',
                         function (Builder $query) use ($search): void {
@@ -87,7 +90,12 @@ class HelpRequestsTable
                     ->options(HelpRequestStatus::class),
                 SelectFilter::make('category')
                     ->label('Type')
-                    ->options(fn (): array => HelpRequests::categories()),
+                    ->options(fn (): array => HelpRequests::categoryFilterOptions()),
+                TernaryFilter::make('is_internal')
+                    ->label('Raised by')
+                    ->placeholder('Anyone')
+                    ->trueLabel(fn (): string => Parley::name().' (help library gaps)')
+                    ->falseLabel('People'),
                 TernaryFilter::make('github_issue_number')
                     ->label('GitHub issue')
                     ->placeholder('All requests')

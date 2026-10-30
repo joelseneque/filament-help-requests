@@ -1,6 +1,7 @@
 <?php
 
 use Filament\Actions\Testing\TestAction;
+use Filament\Support\Facades\FilamentView;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -80,6 +81,21 @@ it('hides the repository picker until the app is installed', function (): void {
     Livewire::actingAs(superAdmin())
         ->test(HelpRequestSettings::class)
         ->assertFormFieldHidden('github_repository');
+});
+
+it('leaves the panel for GitHub with a full page load, even in a SPA panel', function (): void {
+    configureGitHubApp();
+    FilamentView::spa();
+
+    $html = Livewire::actingAs(superAdmin())
+        ->test(HelpRequestSettings::class)
+        ->assertSee('Connect to GitHub')
+        ->html();
+
+    // wire:navigate would fetch the route in the background, and the browser
+    // blocks the redirect to github.com, so the button does nothing.
+    expect($html)->toContain(route('help-requests.github.connect'))
+        ->and($html)->not->toMatch('/href="'.preg_quote(route('help-requests.github.connect'), '/').'"[^>]*wire:navigate/');
 });
 
 it('encrypts the stored installation token', function (): void {

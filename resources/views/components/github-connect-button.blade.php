@@ -1,9 +1,16 @@
+{{--
+    The connect links leave the panel for github.com, so they are full page loads
+    (`:spa-mode="false"`): in a panel with ->spa(), wire:navigate fetches the route in
+    the background, and the redirect to GitHub is a cross-site fetch the browser blocks,
+    so the button did nothing.
+--}}
 <div class="flex flex-wrap items-center gap-3">
     @if ($configured)
         @if ($record && $record->isGithubInstalled())
             <x-filament::button
                 tag="a"
                 :href="route('help-requests.github.connect')"
+                :spa-mode="false"
                 :color="$record->githubNeedsReconnect() ? 'primary' : 'gray'"
                 :outlined="! $record->githubNeedsReconnect()"
                 size="sm"
@@ -22,6 +29,7 @@
             <x-filament::button
                 tag="a"
                 :href="route('help-requests.github.connect')"
+                :spa-mode="false"
                 size="sm"
             >
                 Connect to GitHub

@@ -21,6 +21,7 @@ use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequestReply;
+use Joelseneque\HelpRequests\Parley\Parley;
 use Joelseneque\HelpRequests\Services\GitHubIssueService;
 use Joelseneque\HelpRequests\Support\HelpRequestNotifier;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -82,6 +83,21 @@ class ViewHelpRequest extends ViewRecord
                             ->label('Files'),
                     ])
                     ->columns(2)
+                    ->columnSpanFull(),
+
+                Section::make(fn (): string => Parley::name().' conversation')
+                    ->icon('heroicon-o-sparkles')
+                    ->description(fn (HelpRequest $record): string => $record->is_internal
+                        ? 'The chat '.Parley::name().' could not fully answer. Write or update a help article, then resolve this request.'
+                        : 'What the requester asked '.Parley::name().' before raising this request.')
+                    ->visible(fn (HelpRequest $record): bool => $record->parleyConversation !== null)
+                    ->collapsible()
+                    ->schema([
+                        ViewEntry::make('parley_transcript')
+                            ->hiddenLabel()
+                            ->view('help-requests::components.parley-transcript')
+                            ->state(fn (HelpRequest $record): array => $record->parleyConversation?->visibleMessages()->get()->all() ?? []),
+                    ])
                     ->columnSpanFull(),
 
                 Section::make('GitHub')
