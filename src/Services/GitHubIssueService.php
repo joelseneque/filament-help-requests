@@ -274,7 +274,6 @@ class GitHubIssueService
     public function applyIssue(HelpRequest $helpRequest, array $issue): HelpRequestStatus
     {
         $status = $this->statusForIssue($issue, $helpRequest->status);
-        $previousState = $helpRequest->github_issue_state;
 
         $helpRequest->update([
             'status' => $status,
@@ -283,12 +282,6 @@ class GitHubIssueService
             'github_issue_state' => $issue['state'] ?? $helpRequest->github_issue_state,
             'github_synced_at' => now(),
         ]);
-
-        // Only on a change: when the app closed the issue itself, pushStatus
-        // already swapped the labels and the echoing webhook sees no change.
-        if ($previousState !== $helpRequest->github_issue_state) {
-            $this->swapStateLabels($helpRequest);
-        }
 
         return $status;
     }
@@ -346,49 +339,7 @@ class GitHubIssueService
             'github_synced_at' => now(),
         ]);
 
-        $this->swapStateLabels($helpRequest);
-
         return ['ok' => true, 'message' => "Issue #{$helpRequest->github_issue_number} set to {$helpRequest->github_issue_state}."];
-    }
-
-    /**
-     * Swap the configured open/done labels to match the issue state. Best
-     * effort: a label failure is logged but never undoes the status change.
-     */
-    protected function swapStateLabels(HelpRequest $helpRequest): void
-    {
-        $settings = $this->settings();
-
-        if (! $settings?->isGithubConnected() || ! $helpRequest->hasGithubIssue()) {
-            return;
-        }
-
-        $open = config('help-requests.github.labels.open');
-        $done = config('help-requests.github.labels.done');
-        [$add, $remove] = $helpRequest->github_issue_state === 'closed' ? [$done, $open] : [$open, $done];
-
-        $repository = $helpRequest->github_repository ?: $settings->githubRepository();
-        $path = "/repos/{$repository}/issues/{$helpRequest->github_issue_number}/labels";
-
-        try {
-            if (filled($add)) {
-                $this->client($settings)->post($path, ['labels' => [$add]])->throw();
-            }
-
-            // 404 just means the label was not on the issue.
-            if (filled($remove)) {
-                $response = $this->client($settings)->delete($path.'/'.rawurlencode($remove));
-
-                if ($response->failed() && $response->status() !== 404) {
-                    $response->throw();
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Could not update GitHub issue labels', [
-                'help_request_id' => $helpRequest->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 
     /**
