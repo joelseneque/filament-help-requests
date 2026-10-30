@@ -7,7 +7,7 @@ use Joelseneque\HelpRequests\Models\HelpRequestSetting;
 use Joelseneque\HelpRequests\Services\GitHubIssueService;
 
 beforeEach(function (): void {
-    $this->settings = makeGitHubSettings(['github_default_labels' => ['help-request']]);
+    $this->settings = makeGitHubSettings(['github_default_labels' => ['help request']]);
 
     $this->github = app(GitHubIssueService::class);
 });
@@ -120,7 +120,7 @@ it('creates a github issue and links it to the help request', function (): void 
 
     Http::assertSent(function ($request) use ($helpRequest): bool {
         return $request['title'] === "Help request #{$helpRequest->id}: The quote PDF will not download"
-            && $request['labels'] === ['help-request']
+            && $request['labels'] === ['help request']
             && str_contains($request['body'], 'The quote PDF will not download');
     });
 });

@@ -6,6 +6,13 @@ dates match the releases on
 Upgrade steps for each version are in the README under
 [Upgrading](README.md#upgrading).
 
+## 2.1.1 - 2026-10-30
+
+### Fixed
+
+- The default issue label for new installs is `help request` (was
+  `help-request`). Existing settings rows keep whatever is saved.
+
 ## 2.1.0 - 2026-10-30
 
 ### Changed

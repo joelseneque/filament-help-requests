@@ -402,7 +402,7 @@ this site and save. The connection is stored in this site's database, so
 each environment (local, staging, production) connects separately.
 
 New issues get the labels under **Default labels**, which starts as
-`help-request` so issues raised from the app are easy to filter. Add more
+`help request` so issues raised from the app are easy to filter. Add more
 (for example `AI`) or clear it on the same page. Create the labels in the
 repository first.
 
@@ -473,6 +473,13 @@ Follow these steps in each app that uses the package.
 ### Version notes
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
+
+**2.1.1**
+
+- The default issue label is now `help request` (was `help-request`). Only
+  new settings rows get it — a site already on 2.1.0 keeps `help-request`
+  until you change it on the settings page. No migrations, config or view
+  changes.
 
 **2.1.0**
 
