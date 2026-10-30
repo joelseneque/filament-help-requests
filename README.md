@@ -401,6 +401,11 @@ choose which repositories the app can access, then pick the repository for
 this site and save. The connection is stored in this site's database, so
 each environment (local, staging, production) connects separately.
 
+New issues get the labels under **Default labels**, which starts as
+`help-request` so issues raised from the app are easy to filter. Add more
+(for example `AI`) or clear it on the same page. Create the labels in the
+repository first.
+
 ### Queue and schedule
 
 Automatic issue creation runs on the queue, so a worker must be running. An
@@ -466,6 +471,14 @@ Follow these steps in each app that uses the package.
    button, reply to it from the admin resource and from **My requests**.
 
 ### Version notes
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
+
+**2.1.0**
+
+- New installs start with the `help-request` default issue label. Existing
+  settings are unchanged — add the label on the settings page if you want
+  it. No migrations, config or view changes.
 
 **2.0.0**
 
