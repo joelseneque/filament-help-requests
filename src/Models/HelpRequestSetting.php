@@ -35,14 +35,14 @@ class HelpRequestSetting extends Model
     ];
 
     /**
-     * New rows start with a `help-request` label so issues are easy to filter
+     * New rows start with a `help request` label so issues are easy to filter
      * in GitHub (and by tools reading the repo). Existing rows keep whatever
      * was saved, and clearing the field on the settings page sticks.
      *
      * @var array<string, mixed>
      */
     protected $attributes = [
-        'github_default_labels' => '["help-request"]',
+        'github_default_labels' => '["help request"]',
     ];
 
     /**

@@ -33,7 +33,7 @@ it('saves the issue creation settings from the page', function (): void {
             'github_repository' => 'acme/app',
             'github_enabled' => true,
             'github_auto_create' => true,
-            'github_default_labels' => ['help-request', 'bug'],
+            'github_default_labels' => ['help request', 'bug'],
         ])
         ->call('save')
         ->assertHasNoFormErrors();
@@ -42,12 +42,12 @@ it('saves the issue creation settings from the page', function (): void {
 
     expect($settings->github_repository)->toBe('acme/app');
     expect($settings->github_auto_create)->toBeTrue();
-    expect($settings->github_default_labels)->toBe(['help-request', 'bug']);
+    expect($settings->github_default_labels)->toBe(['help request', 'bug']);
     expect($settings->isGithubConnected())->toBeTrue();
 });
 
-it('starts a new settings row with the help-request label', function (): void {
-    expect(HelpRequestSetting::current()->github_default_labels)->toBe(['help-request']);
+it('starts a new settings row with the help request label', function (): void {
+    expect(HelpRequestSetting::current()->github_default_labels)->toBe(['help request']);
 });
 
 it('keeps cleared default labels cleared', function (): void {
