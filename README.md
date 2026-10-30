@@ -472,6 +472,14 @@ Follow these steps in each app that uses the package.
 
 ### Version notes
 
+See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
+
+**2.1.0**
+
+- New installs start with the `help-request` default issue label. Existing
+  settings are unchanged — add the label on the settings page if you want
+  it. No migrations, config or view changes.
+
 **2.0.0**
 
 - New migration `create_parley_tables` (step 2): the chat's conversations
