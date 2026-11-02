@@ -508,6 +508,12 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
+**2.2.0**
+
+- New `HelpRequests::labelsUsing()` hook to choose GitHub issue labels per
+  request (see [Labels per issue](#labels-per-issue)). Nothing changes
+  until you register it. No migrations, config or view changes.
+
 **2.1.1**
 
 - The default issue label is now `help request` (was `help-request`). Only
