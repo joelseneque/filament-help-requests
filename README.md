@@ -387,7 +387,10 @@ that reacts to a new issue sees them straight away.
   create the issue without labels.
 - If the closure throws, the issue is still created with the default labels
   and a warning is logged.
-- Create every label the closure can return in the repository first.
+- Create every label the closure can return in the repository first. If
+  GitHub rejects the issue (422) and the closure changed the labels, the
+  issue is created again with only the default labels and a warning is
+  logged, so a missing label costs the labels, not the issue.
 
 ## GitHub integration (optional)
 

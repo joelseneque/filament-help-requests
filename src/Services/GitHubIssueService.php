@@ -184,15 +184,33 @@ class GitHubIssueService
         }
 
         $repository = $settings->githubRepository();
+        $defaults = $settings->github_default_labels ?? [];
+        $labels = HelpRequests::issueLabels($helpRequest, $defaults);
 
         $payload = array_filter([
             'title' => $this->issueTitle($helpRequest),
             'body' => $this->issueBody($helpRequest),
-            'labels' => HelpRequests::issueLabels($helpRequest, $settings->github_default_labels ?? []) ?: null,
+            'labels' => $labels ?: null,
         ]);
 
         try {
             $response = $this->client($settings)->post("/repos/{$repository}/issues", $payload);
+
+            // A label the app's hook added may not exist on the repository.
+            // Losing the labels is better than losing the issue, so try once
+            // more with only the saved defaults.
+            if ($response->status() === 422 && $labels !== $defaults) {
+                Log::warning('GitHub rejected the issue labels, retrying with the default labels', [
+                    'help_request_id' => $helpRequest->id,
+                    'labels' => $labels,
+                    'body' => $response->json(),
+                ]);
+
+                $response = $this->client($settings)->post(
+                    "/repos/{$repository}/issues",
+                    array_filter([...$payload, 'labels' => $defaults ?: null]),
+                );
+            }
         } catch (\Throwable $e) {
             Log::error('GitHub issue creation failed', [
                 'help_request_id' => $helpRequest->id,

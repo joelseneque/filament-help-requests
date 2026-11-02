@@ -194,6 +194,28 @@ it('still creates the issue with the default labels when the label hook throws',
     );
 });
 
+it('retries with the default labels when github rejects the hook labels', function (): void {
+    Http::fakeSequence('api.github.com/repos/acme/app/issues')
+        ->push(['message' => 'Validation Failed'], 422)
+        ->push(['number' => 42, 'state' => 'open'], 201);
+    Log::spy();
+
+    HelpRequests::labelsUsing(fn (HelpRequest $request, array $defaults): array => [...$defaults, 'missing-label']);
+
+    $helpRequest = HelpRequest::factory()->create();
+
+    $result = $this->github->createIssue($helpRequest);
+
+    expect($result['ok'])->toBeTrue();
+    expect($helpRequest->refresh()->github_issue_number)->toBe(42);
+    expect(Http::recorded()->map(fn (array $pair): array => $pair[0]['labels'])->all())
+        ->toBe([['help request', 'missing-label'], ['help request']]);
+    Log::shouldHaveReceived('warning')->once()->withArgs(
+        fn (string $message, array $context): bool => $context['help_request_id'] === $helpRequest->id
+            && $context['labels'] === ['help request', 'missing-label'],
+    );
+});
+
 it('forgets the label hook on flush', function (): void {
     HelpRequests::labelsUsing(fn (): array => ['triaged']);
 
@@ -225,6 +247,8 @@ it('surfaces a github error when issue creation is rejected', function (): void 
     expect($result['ok'])->toBeFalse();
     expect($result['message'])->toContain('422')->toContain('Validation Failed');
     expect($helpRequest->refresh()->github_issue_number)->toBeNull();
+    // The default labels were sent, so there is nothing to fall back to.
+    Http::assertSentCount(1);
 });
 
 it('maps issue state to a help request status', function (array $issue, HelpRequestStatus $expected): void {
