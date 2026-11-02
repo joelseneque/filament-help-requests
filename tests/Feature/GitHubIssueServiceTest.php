@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
+use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Models\HelpRequestSetting;
 use Joelseneque\HelpRequests\Services\GitHubIssueService;
@@ -123,6 +125,81 @@ it('creates a github issue and links it to the help request', function (): void 
             && $request['labels'] === ['help request']
             && str_contains($request['body'], 'The quote PDF will not download');
     });
+});
+
+it('creates the issue with the labels the label hook adds', function (): void {
+    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
+
+    HelpRequests::labelsUsing(fn (HelpRequest $request, array $defaults): array => [...$defaults, 'triaged']);
+
+    $this->github->createIssue(HelpRequest::factory()->create());
+
+    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request', 'triaged']);
+});
+
+it('passes the request and the default labels to the label hook', function (): void {
+    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
+
+    $received = null;
+
+    HelpRequests::labelsUsing(function (HelpRequest $request, array $defaults) use (&$received): array {
+        $received = [$request->id, $defaults];
+
+        return $defaults;
+    });
+
+    $helpRequest = HelpRequest::factory()->create();
+
+    $this->github->createIssue($helpRequest);
+
+    expect($received)->toBe([$helpRequest->id, ['help request']]);
+});
+
+it('trims the hook labels and drops blanks and repeats', function (): void {
+    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
+
+    HelpRequests::labelsUsing(fn (): array => [' bug ', '', 'bug', '  ', 'help request']);
+
+    $this->github->createIssue(HelpRequest::factory()->create());
+
+    Http::assertSent(fn ($request): bool => $request['labels'] === ['bug', 'help request']);
+});
+
+it('sends no labels when the label hook returns none', function (): void {
+    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
+
+    HelpRequests::labelsUsing(fn (): array => []);
+
+    $this->github->createIssue(HelpRequest::factory()->create());
+
+    Http::assertSent(fn ($request): bool => ! array_key_exists('labels', $request->data()));
+});
+
+it('still creates the issue with the default labels when the label hook throws', function (): void {
+    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
+    Log::spy();
+
+    HelpRequests::labelsUsing(fn (): array => throw new RuntimeException('Triage service is down'));
+
+    $helpRequest = HelpRequest::factory()->create();
+
+    $result = $this->github->createIssue($helpRequest);
+
+    expect($result['ok'])->toBeTrue();
+    expect($helpRequest->refresh()->github_issue_number)->toBe(42);
+    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request']);
+    Log::shouldHaveReceived('warning')->once()->withArgs(
+        fn (string $message, array $context): bool => $context['help_request_id'] === $helpRequest->id
+            && $context['error'] === 'Triage service is down',
+    );
+});
+
+it('forgets the label hook on flush', function (): void {
+    HelpRequests::labelsUsing(fn (): array => ['triaged']);
+
+    HelpRequests::flush();
+
+    expect(HelpRequests::issueLabels(HelpRequest::factory()->create(), ['help request']))->toBe(['help request']);
 });
 
 it('does not create a second issue for an already linked request', function (): void {

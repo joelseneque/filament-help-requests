@@ -188,7 +188,7 @@ class GitHubIssueService
         $payload = array_filter([
             'title' => $this->issueTitle($helpRequest),
             'body' => $this->issueBody($helpRequest),
-            'labels' => $settings->github_default_labels ?: null,
+            'labels' => HelpRequests::issueLabels($helpRequest, $settings->github_default_labels ?? []) ?: null,
         ]);
 
         try {

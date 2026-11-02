@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
 use Joelseneque\HelpRequests\Models\HelpRequest;
@@ -37,6 +38,8 @@ class HelpRequests
     protected static ?Closure $adminRecipientsUsing = null;
 
     protected static ?Closure $sendNotificationsUsing = null;
+
+    protected static ?Closure $labelsUsing = null;
 
     protected static ?string $panelId = null;
 
@@ -80,6 +83,18 @@ class HelpRequests
     public static function sendNotificationsUsing(?Closure $callback): void
     {
         static::$sendNotificationsUsing = $callback;
+    }
+
+    /**
+     * Choose the labels a request's GitHub issue is created with. They are
+     * sent with the request that creates the issue, so anything reacting to
+     * the new issue already sees them; labels added later would be too late.
+     *
+     * @param  Closure(HelpRequest $helpRequest, array<int, string> $defaults): array<int, string>|null  $callback
+     */
+    public static function labelsUsing(?Closure $callback): void
+    {
+        static::$labelsUsing = $callback;
     }
 
     /**
@@ -324,6 +339,39 @@ class HelpRequests
         $user->notify($notification);
     }
 
+    /**
+     * The labels a new GitHub issue is created with: the saved defaults, or
+     * what the app's hook returns, trimmed and without blanks or repeats.
+     *
+     * A hook that fails falls back to the defaults — a broken hook may cost
+     * the labels, never the issue.
+     *
+     * @param  array<int, string>  $defaults
+     * @return array<int, string>
+     */
+    public static function issueLabels(HelpRequest $helpRequest, array $defaults): array
+    {
+        if (! static::$labelsUsing) {
+            return $defaults;
+        }
+
+        try {
+            return collect((static::$labelsUsing)($helpRequest, $defaults))
+                ->map(fn (mixed $label): string => trim((string) $label))
+                ->reject(fn (string $label): bool => $label === '')
+                ->unique()
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('GitHub issue label hook failed, using the default labels', [
+                'help_request_id' => $helpRequest->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $defaults;
+        }
+    }
+
     public static function userName(?object $user, string $fallback = 'Unknown'): string
     {
         if ($user === null) {
@@ -430,6 +478,7 @@ class HelpRequests
         static::$authorizeSettingsUsing = null;
         static::$adminRecipientsUsing = null;
         static::$sendNotificationsUsing = null;
+        static::$labelsUsing = null;
         static::$panelId = null;
         static::$categories = null;
         static::$videoLinksEnabled = null;

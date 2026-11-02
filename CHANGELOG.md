@@ -6,6 +6,15 @@ dates match the releases on
 Upgrade steps for each version are in the README under
 [Upgrading](README.md#upgrading).
 
+## Unreleased
+
+### Added
+
+- `HelpRequests::labelsUsing()` lets the app choose the labels each GitHub
+  issue is created with. The closure gets the request and the default
+  labels; without one, issues get the default labels as before. See
+  [Labels per issue](README.md#labels-per-issue).
+
 ## 2.1.1 - 2026-10-30
 
 ### Fixed

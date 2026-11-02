@@ -359,6 +359,36 @@ With several panels, register the plugin on each panel where it should
 appear. `->resource(false)` / `->widget(false)` let you put the admin pages
 in one panel and the help button in another.
 
+### Labels per issue
+
+New GitHub issues get the **Default labels** from the settings page. To
+choose labels per request, register a hook in a service provider's `boot()`
+method, so queue workers have it too:
+
+```php
+use Joelseneque\HelpRequests\HelpRequests;
+use Joelseneque\HelpRequests\Models\HelpRequest;
+
+HelpRequests::labelsUsing(fn (HelpRequest $request, array $defaults): array => [
+    ...$defaults,
+    ...app(MyTriage::class)->labelsFor($request),
+]);
+```
+
+The closure gets the request and the default labels and returns the full
+list. The labels are sent in the request that creates the issue, so anything
+that reacts to a new issue sees them straight away.
+
+- The closure runs when the issue is created: usually in the queued
+  `CreateGitHubIssueForHelpRequest` job, but inside the web request for the
+  **Create GitHub issue** button and when `QUEUE_CONNECTION=sync`. A slow
+  closure makes that request wait.
+- Labels are trimmed, and blanks and repeats are dropped. Return `[]` to
+  create the issue without labels.
+- If the closure throws, the issue is still created with the default labels
+  and a warning is logged.
+- Create every label the closure can return in the repository first.
+
 ## GitHub integration (optional)
 
 Requests can be raised as issues in a GitHub repository, either
@@ -404,7 +434,8 @@ each environment (local, staging, production) connects separately.
 New issues get the labels under **Default labels**, which starts as
 `help request` so issues raised from the app are easy to filter. Add more
 (for example `AI`) or clear it on the same page. Create the labels in the
-repository first.
+repository first. To choose labels per request, see
+[Labels per issue](#labels-per-issue).
 
 ### Queue and schedule
 
