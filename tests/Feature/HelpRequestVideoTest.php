@@ -112,7 +112,7 @@ it('includes the video link in the admin email and the github issue', function (
 
     app(GitHubIssueService::class)->createIssue($request);
 
-    Http::assertSent(fn ($sent): bool => str_contains($sent['body'], '**Video:** '.LOOM_URL));
+    Http::assertSent(fn ($sent): bool => $sent->method() === 'POST' && str_contains($sent['body'], '**Video:** '.LOOM_URL));
 });
 
 it('lets the plugin switch the video field off and back on', function () {

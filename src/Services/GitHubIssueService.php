@@ -449,7 +449,7 @@ class GitHubIssueService
             return [];
         }
 
-        if ($response->failed() || ! is_array($response->json())) {
+        if ($response->failed() || ! is_array($response->json()) || ! array_is_list($response->json())) {
             Log::warning('GitHub issue fields are not available', [
                 'owner' => $owner,
                 'status' => $response->status(),

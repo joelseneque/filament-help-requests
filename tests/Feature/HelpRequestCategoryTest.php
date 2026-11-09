@@ -133,6 +133,6 @@ it('includes the category in the github issue', function () {
 
     app(GitHubIssueService::class)->createIssue($request);
 
-    Http::assertSent(fn ($sent): bool => str_contains($sent['title'], '[Looks broken]')
+    Http::assertSent(fn ($sent): bool => $sent->method() === 'POST' && str_contains($sent['title'], '[Looks broken]')
         && str_contains($sent['body'], '**Type:** Looks broken'));
 });
