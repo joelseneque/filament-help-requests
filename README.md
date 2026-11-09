@@ -17,7 +17,7 @@ A drop-in help desk for Filament v5 panels.
 - **"My requests" tab** in the same widget: a collapsible list of their requests
   (one thread open at a time) where they read replies and reply back.
 - **Admin triage** — a resource to list, filter, reply (with attachments),
-  change status and delete requests.
+  change status, set priority and delete requests.
 - **Notifications** — email + in-app to admins on new requests and replies;
   email + in-app to the requester on replies and resolution.
 - **Optional GitHub sync** via a GitHub App — raise requests as issues,
@@ -153,7 +153,10 @@ Every request carries a priority, which sets its due date:
 | Low | one month after it is raised |
 
 Requesters pick one in the widget; Medium is preselected. Admins can change
-the priority afterwards. "Same day" means the end of the day in your app's
+the priority afterwards ("Set priority" on the request page); the due date is
+always counted from when the request was raised. The admin list shows Priority
+and Due columns (overdue dates in red), with a Priority filter and an **Overdue**
+toggle for open requests past their due date. "Same day" means the end of the day in your app's
 `app.timezone` setting, so an app left on UTC puts the deadline mid-morning
 the next day for a team in Australia.
 

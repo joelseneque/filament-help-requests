@@ -1,8 +1,11 @@
 <?php
 
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Carbon;
 use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
+use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\Pages\ListHelpRequests;
+use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\Pages\ViewHelpRequest;
 use Joelseneque\HelpRequests\Livewire\HelpRequestWidget;
 use Joelseneque\HelpRequests\Models\HelpRequest;
 use Joelseneque\HelpRequests\Tests\Fixtures\User;
@@ -103,4 +106,57 @@ it('rejects a priority that is not offered', function () {
         ->assertHasErrors(['priority']);
 
     expect(HelpRequest::query()->count())->toBe(0);
+});
+
+it('shows and filters by priority in the admin list', function () {
+    $this->actingAs(User::factory()->create());
+
+    $high = HelpRequest::factory()->create(['priority' => HelpRequestPriority::High]);
+    $low = HelpRequest::factory()->create(['priority' => HelpRequestPriority::Low]);
+
+    Livewire::test(ListHelpRequests::class)
+        ->assertSee('High')
+        ->filterTable('priority', 'high')
+        ->assertCanSeeTableRecords([$high])
+        ->assertCanNotSeeTableRecords([$low]);
+});
+
+it('filters the admin list to overdue requests', function () {
+    $this->actingAs(User::factory()->create());
+
+    $overdue = HelpRequest::factory()->create(['due_at' => now()->subDay()]);
+    $future = HelpRequest::factory()->create(['due_at' => now()->addDay()]);
+    $done = HelpRequest::factory()->create(['due_at' => now()->subDay(), 'status' => HelpRequestStatus::Resolved]);
+
+    Livewire::test(ListHelpRequests::class)
+        ->filterTable('overdue')
+        ->assertCanSeeTableRecords([$overdue])
+        ->assertCanNotSeeTableRecords([$future, $done]);
+});
+
+it('lets an admin change the priority, recomputing the due date from submission', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->travelTo(Carbon::parse('2026-09-09 10:00'));
+    $request = HelpRequest::factory()->create();
+    $this->travelTo(Carbon::parse('2026-11-09 10:00'));
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
+        ->callAction(TestAction::make('setPriority'), ['priority' => 'low'])
+        ->assertHasNoActionErrors();
+
+    $request->refresh();
+
+    expect($request->priority)->toBe(HelpRequestPriority::Low)
+        ->and($request->due_at->toDateTimeString())->toBe($request->created_at->copy()->addMonth()->toDateTimeString())
+        ->and($request->isOverdue())->toBeTrue();
+});
+
+it('shows priority and due date on the request page', function () {
+    $this->actingAs(User::factory()->create());
+
+    $request = HelpRequest::factory()->create(['priority' => HelpRequestPriority::High, 'due_at' => now()->addDay()]);
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
+        ->assertSee(['High', $request->due_at->format('d M Y, g:i A')]);
 });

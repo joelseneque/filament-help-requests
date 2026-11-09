@@ -6,10 +6,12 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\HelpRequest;
@@ -65,6 +67,15 @@ class HelpRequestsTable
                 TextColumn::make('status')
                     ->badge()
                     ->sortable(),
+                TextColumn::make('priority')
+                    ->badge()
+                    ->sortable(),
+                TextColumn::make('due_at')
+                    ->label('Due')
+                    ->dateTime('d M Y, g:i A')
+                    ->placeholder('—')
+                    ->color(fn (HelpRequest $record): ?string => $record->isOverdue() ? 'danger' : null)
+                    ->sortable(),
                 TextColumn::make('github_issue_number')
                     ->label('GitHub')
                     ->formatStateUsing(fn (?int $state): string => $state ? "#{$state}" : '—')
@@ -88,6 +99,11 @@ class HelpRequestsTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(HelpRequestStatus::class),
+                SelectFilter::make('priority')
+                    ->options(HelpRequestPriority::class),
+                Filter::make('overdue')
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->overdue()),
                 SelectFilter::make('category')
                     ->label('Type')
                     ->options(fn (): array => HelpRequests::categoryFilterOptions()),
