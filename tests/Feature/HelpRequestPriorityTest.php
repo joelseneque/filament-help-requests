@@ -223,3 +223,17 @@ it('keeps the new priority when github cannot be reached', function () {
 
     expect($request->refresh()->priority)->toBe(HelpRequestPriority::Low);
 });
+
+it('does not tell github about a first priority on a request that never had one', function () {
+    makeGitHubSettings();
+    Http::fake();
+    $this->actingAs(User::factory()->create());
+    $note = HelpRequest::factory()->linkedToIssue()->create(['is_internal' => true]);
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $note->getKey()])
+        ->callAction(TestAction::make('setPriority'), ['priority' => 'low'])
+        ->assertHasNoActionErrors();
+
+    expect($note->refresh()->priority)->toBe(HelpRequestPriority::Low);
+    Http::assertNothingSent();
+});
