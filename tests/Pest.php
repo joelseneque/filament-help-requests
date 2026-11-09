@@ -77,3 +77,24 @@ function postGithubWebhook(array $payload, ?string $secret = 'webhook-secret', s
         ->merge(['CONTENT_TYPE' => 'application/json'])
         ->all(), $body);
 }
+
+/**
+ * The organisation's issue fields as GitHub lists them: the default Priority
+ * and Target date fields.
+ *
+ * @param  list<string>  $priorityOptions
+ * @return list<array<string, mixed>>
+ */
+function fakeIssueFields(array $priorityOptions = ['Urgent', 'High', 'Medium', 'Low']): array
+{
+    return [
+        [
+            'id' => 11,
+            'name' => 'Priority',
+            'data_type' => 'single_select',
+            'options' => array_map(fn (string $name): array => ['id' => crc32($name), 'name' => $name], $priorityOptions),
+        ],
+        ['id' => 12, 'name' => 'Target date', 'data_type' => 'date', 'options' => null],
+        ['id' => 13, 'name' => 'Effort', 'data_type' => 'single_select', 'options' => [['id' => 1, 'name' => 'High']]],
+    ];
+}

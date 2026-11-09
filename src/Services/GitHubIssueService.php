@@ -164,7 +164,15 @@ class GitHubIssueService
             return ['ok' => false, 'message' => "Connected to {$repository}, but the app installation does not have write access to Issues."];
         }
 
-        return ['ok' => true, 'message' => 'Connected to '.$response->json('full_name', $repository).'.'];
+        // Not a failure: issues are still created without the fields, but this
+        // is where an admin finds out the permission or the fields are missing.
+        $fieldNames = collect($this->issueFields($repository, fresh: true))
+            ->map(fn (array $field): string => Str::lower((string) ($field['name'] ?? '')));
+        $fields = $fieldNames->contains('priority') && $fieldNames->contains('target date')
+            ? ' Priority and Target date fields: found.'
+            : ' Priority and Target date fields: not available. Give the app read access to the organisation\'s issue fields, or ignore this for a repository owned by a personal account.';
+
+        return ['ok' => true, 'message' => 'Connected to '.$response->json('full_name', $repository).'.'.$fields];
     }
 
     /**
@@ -187,37 +195,34 @@ class GitHubIssueService
         $repository = $settings->githubRepository();
         $defaults = $settings->github_default_labels ?? [];
 
-        // The priority label rides with the defaults so the hook can drop it,
-        // but the 422 retry below falls back to the saved defaults alone: a
-        // repository without the priority labels still gets its issue.
-        // Requests without a due date (internal notes) had no priority chosen.
-        $labels = HelpRequests::issueLabels($helpRequest, array_values(array_unique([
-            ...$defaults,
-            ...($helpRequest->due_at ? [$helpRequest->priority->githubLabel()] : []),
-        ])));
+        $labels = HelpRequests::issueLabels($helpRequest, $defaults);
+        $fieldValues = $this->issueFieldValues($helpRequest, $repository);
 
         $payload = array_filter([
             'title' => $this->issueTitle($helpRequest),
             'body' => $this->issueBody($helpRequest),
             'labels' => $labels ?: null,
+            'issue_field_values' => $fieldValues ?: null,
         ]);
 
         try {
             $response = $this->client($settings)->post("/repos/{$repository}/issues", $payload);
 
-            // A label the app's hook added may not exist on the repository.
-            // Losing the labels is better than losing the issue, so try once
-            // more with only the saved defaults.
-            if ($response->status() === 422 && $labels !== $defaults) {
-                Log::warning('GitHub rejected the issue labels, retrying with the default labels', [
+            // A label the app's hook added may not exist on the repository, or
+            // a field value may no longer fit the field. Losing those is better
+            // than losing the issue, so try once more with only the saved
+            // default labels and no field values.
+            if ($response->status() === 422 && ($labels !== $defaults || $fieldValues !== [])) {
+                Log::warning('GitHub rejected the issue labels or fields, retrying with the default labels', [
                     'help_request_id' => $helpRequest->id,
                     'labels' => $labels,
+                    'issue_field_values' => $fieldValues,
                     'body' => $response->json(),
                 ]);
 
                 $response = $this->client($settings)->post(
                     "/repos/{$repository}/issues",
-                    array_filter([...$payload, 'labels' => $defaults ?: null]),
+                    array_filter([...$payload, 'labels' => $defaults ?: null, 'issue_field_values' => null]),
                 );
             }
         } catch (\Throwable $e) {
@@ -370,10 +375,104 @@ class GitHubIssueService
     }
 
     /**
+     * Values for GitHub's default Priority and Target date issue fields.
+     *
+     * Empty when the request has no due date (nobody chose its priority) or
+     * the organisation's fields can't be read: a personal-account repository,
+     * an app without the issue fields permission, or a renamed field. The
+     * issue body still shows the priority, so nothing is lost but the field.
+     *
+     * @return list<array{field_id: int, value: string}>
+     */
+    public function issueFieldValues(HelpRequest $helpRequest, string $repository): array
+    {
+        if ($helpRequest->due_at === null) {
+            return [];
+        }
+
+        $fields = collect($this->issueFields($repository))
+            ->keyBy(fn (array $field): string => Str::lower((string) ($field['name'] ?? '')));
+
+        $values = [];
+        $priority = $fields->get('priority');
+        $option = $helpRequest->priority->getLabel();
+
+        // A single-select value must name an existing option.
+        if (($priority['data_type'] ?? null) === 'single_select' && collect($priority['options'] ?? [])->contains('name', $option)) {
+            $values[] = ['field_id' => (int) $priority['id'], 'value' => $option];
+        }
+
+        $target = $fields->get('target date');
+
+        if (($target['data_type'] ?? null) === 'date') {
+            $values[] = ['field_id' => (int) $target['id'], 'value' => $helpRequest->due_at->toDateString()];
+        }
+
+        return $values;
+    }
+
+    /**
+     * The issue fields of the organisation that owns $repository.
+     *
+     * Cached for an hour, since every new issue needs them and they rarely
+     * change. A failed lookup is never cached, so granting the permission
+     * takes effect on the next issue.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function issueFields(string $repository, bool $fresh = false): array
+    {
+        $settings = $this->settings();
+        $owner = Str::before($repository, '/');
+
+        if (! $settings?->isGithubConnected() || $owner === '') {
+            return [];
+        }
+
+        $cacheKey = "github-issue-fields-{$owner}";
+
+        if (! $fresh && ($cached = Cache::get($cacheKey))) {
+            return $cached;
+        }
+
+        try {
+            $response = $this->client($settings)->get("/orgs/{$owner}/issue-fields");
+        } catch (\Throwable $e) {
+            Log::warning('Could not look up the GitHub issue fields', ['owner' => $owner, 'error' => $e->getMessage()]);
+
+            return [];
+        }
+
+        // 404 is the normal answer for a personal-account repository, which
+        // has no issue fields; anything else is worth a warning.
+        if ($response->status() === 404) {
+            return [];
+        }
+
+        if ($response->failed() || ! is_array($response->json()) || ! array_is_list($response->json())) {
+            Log::warning('GitHub issue fields are not available', [
+                'owner' => $owner,
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ]);
+
+            return [];
+        }
+
+        $fields = array_values(array_filter($response->json(), 'is_array'));
+
+        if ($fields !== []) {
+            Cache::put($cacheKey, $fields, now()->addHour());
+        }
+
+        return $fields;
+    }
+
+    /**
      * Tell the linked issue an admin re-triaged the request: a comment, and
-     * the priority label swapped. The body is left alone so edits made on
-     * GitHub survive. The label swap is best-effort, since the comment
-     * already carries the news.
+     * the Priority and Target date fields updated. The body is left alone so
+     * edits made on GitHub survive. The field update is best-effort, since
+     * the comment already carries the news.
      *
      * @return array{ok: bool, message: string}
      */
@@ -389,24 +488,29 @@ class GitHubIssueService
             return ['ok' => true, 'message' => 'GitHub is already up to date.'];
         }
 
-        $issue = '/repos/'.($helpRequest->github_repository ?: $settings->githubRepository())."/issues/{$helpRequest->github_issue_number}";
+        $repository = $helpRequest->github_repository ?: $settings->githubRepository();
+        $issue = "/repos/{$repository}/issues/{$helpRequest->github_issue_number}";
         $body = "Priority changed from {$previous->getLabel()} to {$helpRequest->priority->getLabel()} in "
             .HelpRequests::appName().' · due '.$helpRequest->due_at->format('d M Y, g:i A');
 
         try {
             $response = $this->client($settings)->post("{$issue}/comments", ['body' => $body]);
 
-            if ($response->successful()) {
-                $removed = $this->client($settings)->delete("{$issue}/labels/".rawurlencode($previous->githubLabel()));
-                $added = $this->client($settings)->post("{$issue}/labels", ['labels' => [$helpRequest->priority->githubLabel()]]);
+            $fieldValues = $response->successful() ? $this->issueFieldValues($helpRequest, $repository) : [];
 
-                // A 404 means the old label was already gone, which is fine.
-                if (($removed->failed() && $removed->status() !== 404) || $added->failed()) {
-                    Log::warning('GitHub priority label swap failed', [
-                        'help_request_id' => $helpRequest->id,
-                        'removed_status' => $removed->status(),
-                        'added_status' => $added->status(),
-                    ]);
+            if ($fieldValues !== []) {
+                // Its own try: the comment is already posted, so a failure here
+                // must not report the re-triage as failed (a retry would post
+                // the comment twice).
+                try {
+                    $fields = $this->client($settings)->post("{$issue}/issue-field-values", ['issue_field_values' => $fieldValues]);
+                    $fieldError = $fields->failed() ? ['status' => $fields->status(), 'body' => $fields->json()] : null;
+                } catch (\Throwable $e) {
+                    $fieldError = ['error' => $e->getMessage()];
+                }
+
+                if ($fieldError !== null) {
+                    Log::warning('GitHub issue field update failed', ['help_request_id' => $helpRequest->id, ...$fieldError]);
                 }
             }
         } catch (\Throwable $e) {

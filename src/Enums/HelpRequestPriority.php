@@ -44,14 +44,6 @@ enum HelpRequestPriority: string implements HasColor, HasLabel
     }
 
     /**
-     * The label new GitHub issues get, so the team can filter issues by priority.
-     */
-    public function githubLabel(): string
-    {
-        return 'priority: '.$this->value;
-    }
-
-    /**
      * The deadline for a request raised at $from. Works on a copy so the
      * caller's instance (often `now()` or `created_at`) is never mutated.
      */
