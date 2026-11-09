@@ -260,6 +260,11 @@ class ViewHelpRequest extends ViewRecord
                         ? $data['priority']
                         : HelpRequestPriority::from($data['priority']);
 
+                    $previous = $record->priority;
+                    // No due date means nobody chose the old priority (internal
+                    // notes, pre-2.3.0 requests); "changed from Medium" would mislead.
+                    $hadPriority = $record->due_at !== null;
+
                     // Counted from submission, not from now, so re-triaging
                     // never hands an old request a fresh deadline.
                     $record->update([
@@ -271,6 +276,18 @@ class ViewHelpRequest extends ViewRecord
                         ->title('Priority updated')
                         ->success()
                         ->send();
+
+                    if ($hadPriority && $record->hasGithubIssue()) {
+                        $result = app(GitHubIssueService::class)->pushPriority($record, $previous);
+
+                        if (! $result['ok']) {
+                            Notification::make()
+                                ->title('GitHub was not updated')
+                                ->body($result['message'])
+                                ->warning()
+                                ->send();
+                        }
+                    }
                 }),
 
             Action::make('createGithubIssue')

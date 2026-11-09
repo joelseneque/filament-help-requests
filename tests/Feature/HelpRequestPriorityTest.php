@@ -1,7 +1,9 @@
 <?php
 
 use Filament\Actions\Testing\TestAction;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\Pages\ListHelpRequests;
@@ -193,4 +195,45 @@ it('agrees with the overdue scope on which statuses are finished', function () {
     expect(HelpRequestStatus::finished())->toBe(
         array_values(array_filter(HelpRequestStatus::cases(), fn (HelpRequestStatus $status): bool => $status->isFinished())),
     );
+});
+
+it('tells the linked github issue when an admin changes the priority', function () {
+    makeGitHubSettings();
+    Http::fake(['api.github.com/*' => Http::response(['id' => 1])]);
+    $this->actingAs(User::factory()->create());
+    $request = HelpRequest::factory()->linkedToIssue()->create();
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
+        ->callAction(TestAction::make('setPriority'), ['priority' => 'low'])
+        ->assertHasNoActionErrors();
+
+    Http::assertSent(fn ($sent): bool => str_ends_with($sent->url(), '/issues/42/comments'));
+});
+
+it('keeps the new priority when github cannot be reached', function () {
+    makeGitHubSettings();
+    Http::fake(fn () => throw new ConnectionException('GitHub is down'));
+    $this->actingAs(User::factory()->create());
+    $request = HelpRequest::factory()->linkedToIssue()->create();
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
+        ->callAction(TestAction::make('setPriority'), ['priority' => 'low'])
+        ->assertHasNoActionErrors()
+        ->assertNotified('GitHub was not updated');
+
+    expect($request->refresh()->priority)->toBe(HelpRequestPriority::Low);
+});
+
+it('does not tell github about a first priority on a request that never had one', function () {
+    makeGitHubSettings();
+    Http::fake();
+    $this->actingAs(User::factory()->create());
+    $note = HelpRequest::factory()->linkedToIssue()->create(['is_internal' => true]);
+
+    Livewire::test(ViewHelpRequest::class, ['record' => $note->getKey()])
+        ->callAction(TestAction::make('setPriority'), ['priority' => 'low'])
+        ->assertHasNoActionErrors();
+
+    expect($note->refresh()->priority)->toBe(HelpRequestPriority::Low);
+    Http::assertNothingSent();
 });

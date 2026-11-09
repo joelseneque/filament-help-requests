@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\HelpRequest;
@@ -185,7 +186,15 @@ class GitHubIssueService
 
         $repository = $settings->githubRepository();
         $defaults = $settings->github_default_labels ?? [];
-        $labels = HelpRequests::issueLabels($helpRequest, $defaults);
+
+        // The priority label rides with the defaults so the hook can drop it,
+        // but the 422 retry below falls back to the saved defaults alone: a
+        // repository without the priority labels still gets its issue.
+        // Requests without a due date (internal notes) had no priority chosen.
+        $labels = HelpRequests::issueLabels($helpRequest, array_values(array_unique([
+            ...$defaults,
+            ...($helpRequest->due_at ? [$helpRequest->priority->githubLabel()] : []),
+        ])));
 
         $payload = array_filter([
             'title' => $this->issueTitle($helpRequest),
@@ -361,6 +370,70 @@ class GitHubIssueService
     }
 
     /**
+     * Tell the linked issue an admin re-triaged the request: a comment, and
+     * the priority label swapped. The body is left alone so edits made on
+     * GitHub survive. The label swap is best-effort, since the comment
+     * already carries the news.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function pushPriority(HelpRequest $helpRequest, HelpRequestPriority $previous): array
+    {
+        $settings = $this->settings();
+
+        if (! $settings?->isGithubConnected() || ! $helpRequest->hasGithubIssue()) {
+            return ['ok' => false, 'message' => 'Nothing to push.'];
+        }
+
+        if ($previous === $helpRequest->priority || $helpRequest->due_at === null) {
+            return ['ok' => true, 'message' => 'GitHub is already up to date.'];
+        }
+
+        $issue = '/repos/'.($helpRequest->github_repository ?: $settings->githubRepository())."/issues/{$helpRequest->github_issue_number}";
+        $body = "Priority changed from {$previous->getLabel()} to {$helpRequest->priority->getLabel()} in "
+            .HelpRequests::appName().' · due '.$helpRequest->due_at->format('d M Y, g:i A');
+
+        try {
+            $response = $this->client($settings)->post("{$issue}/comments", ['body' => $body]);
+
+            if ($response->successful()) {
+                $removed = $this->client($settings)->delete("{$issue}/labels/".rawurlencode($previous->githubLabel()));
+                $added = $this->client($settings)->post("{$issue}/labels", ['labels' => [$helpRequest->priority->githubLabel()]]);
+
+                // A 404 means the old label was already gone, which is fine.
+                if (($removed->failed() && $removed->status() !== 404) || $added->failed()) {
+                    Log::warning('GitHub priority label swap failed', [
+                        'help_request_id' => $helpRequest->id,
+                        'removed_status' => $removed->status(),
+                        'added_status' => $added->status(),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('GitHub priority update failed', [
+                'help_request_id' => $helpRequest->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['ok' => false, 'message' => 'Could not reach GitHub: '.$e->getMessage()];
+        }
+
+        if ($response->failed()) {
+            Log::error('GitHub priority comment rejected', [
+                'help_request_id' => $helpRequest->id,
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ]);
+
+            return ['ok' => false, 'message' => "GitHub returned {$response->status()}: ".$this->errorMessage($response->json())];
+        }
+
+        $helpRequest->update(['github_synced_at' => now()]);
+
+        return ['ok' => true, 'message' => "Issue #{$helpRequest->github_issue_number} told about the new priority."];
+    }
+
+    /**
      * Mirror a reply written in the app onto the linked issue, so the dev team
      * sees on the issue what the requester was told.
      *
@@ -472,6 +545,10 @@ class GitHubIssueService
 
         if ($category = $helpRequest->categoryLabel()) {
             $lines[] = "**Type:** {$category}";
+        }
+
+        if ($helpRequest->due_at) {
+            $lines[] = "**Priority:** {$helpRequest->priority->getLabel()} · due {$helpRequest->due_at->format('d M Y, g:i A')}";
         }
 
         if ($helpRequest->page_title || $helpRequest->page_url) {
