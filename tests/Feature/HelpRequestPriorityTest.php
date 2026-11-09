@@ -24,6 +24,12 @@ it('works out the due date for each priority', function () {
         ->and($from->toDateTimeString())->toBe('2026-11-09 10:00:00');
 });
 
+it('does not overflow a month deadline past the end of a short month', function () {
+    $from = Carbon::parse('2027-01-31 10:00');
+
+    expect(HelpRequestPriority::Low->dueAt($from)->toDateTimeString())->toBe('2027-02-28 10:00:00');
+});
+
 it('defaults a new request to medium with a due date', function () {
     $request = HelpRequest::create(['comment' => 'Help']);
 

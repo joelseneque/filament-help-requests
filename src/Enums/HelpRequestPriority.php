@@ -54,7 +54,7 @@ enum HelpRequestPriority: string implements HasColor, HasLabel
         return match ($this) {
             self::High => $date->endOfDay(),
             self::Medium => $date->addWeek(),
-            self::Low => $date->addMonth(),
+            self::Low => $date->addMonthNoOverflow(),
         };
     }
 }

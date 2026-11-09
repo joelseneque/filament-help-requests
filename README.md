@@ -154,11 +154,13 @@ Every request carries a priority, which sets its due date:
 
 Requesters pick one in the widget; Medium is preselected. Admins can change
 the priority afterwards ("Set priority" on the request page); the due date is
-always counted from when the request was raised. The admin list shows Priority
-and Due columns (overdue dates in red), with a Priority filter and an **Overdue**
-toggle for open requests past their due date. "Same day" means the end of the day in your app's
-`app.timezone` setting, so an app left on UTC puts the deadline mid-morning
-the next day for a team in Australia.
+always counted from when the request was raised. The admin list shows
+Priority and Due columns (overdue dates in red), with a Priority filter and
+an **Overdue** toggle for open requests past their due date.
+
+"Same day" means the end of the day in your app's `app.timezone` setting, so
+an app left on UTC puts the deadline mid-morning the next day for a team in
+Australia.
 
 ### Loom videos
 

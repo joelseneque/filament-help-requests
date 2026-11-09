@@ -68,8 +68,7 @@ class HelpRequestsTable
                     ->badge()
                     ->sortable(),
                 TextColumn::make('priority')
-                    ->badge()
-                    ->sortable(),
+                    ->badge(),
                 TextColumn::make('due_at')
                     ->label('Due')
                     ->dateTime('d M Y, g:i A')
