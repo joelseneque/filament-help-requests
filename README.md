@@ -17,7 +17,7 @@ A drop-in help desk for Filament v5 panels.
 - **"My requests" tab** in the same widget: a collapsible list of their requests
   (one thread open at a time) where they read replies and reply back.
 - **Admin triage** — a resource to list, filter, reply (with attachments),
-  change status and delete requests.
+  change status, set priority and delete requests.
 - **Notifications** — email + in-app to admins on new requests and replies;
   email + in-app to the requester on replies and resolution.
 - **Optional GitHub sync** via a GitHub App — raise requests as issues,
@@ -141,6 +141,32 @@ Categories are stored by key, so relabelling one keeps old requests
 correct. A key you later remove still shows a readable label on old
 requests. The category appears in the admin list (with a filter), on the
 request page, in the admin email and in the GitHub issue title.
+
+### Priority
+
+Every request carries a priority, which sets its due date:
+
+| Priority | Due |
+| --- | --- |
+| High | the same day |
+| Medium | one week after it is raised |
+| Low | one month after it is raised |
+
+Requesters pick one in the widget; Medium is preselected. Admins can change
+the priority afterwards ("Set priority" on the request page); the due date is
+always counted from when the request was raised. The admin list shows
+Priority and Due columns (overdue dates in red), with a Priority filter and
+an **Overdue** toggle for open requests past their due date. Sorting by Due
+puts requests without a due date last.
+
+Two kinds of request have no due date and never show as overdue: requests
+from before priorities existed, and Parley's internal notes about missing
+help articles, since nobody chose a priority for them. Setting a priority on
+one gives it a due date.
+
+"Same day" means the end of the day in your app's `app.timezone` setting, so
+an app left on UTC puts the deadline mid-morning the next day for a team in
+Australia.
 
 ### Loom videos
 
@@ -507,6 +533,10 @@ Follow these steps in each app that uses the package.
 ### Version notes
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
+
+**Unreleased**
+
+- New migration `add_priority_to_help_requests_table` (publish and run it, step 2). Existing requests become Medium with no due date.
 
 **2.2.0**
 

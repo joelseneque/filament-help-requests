@@ -6,6 +6,19 @@ dates match the releases on
 Upgrade steps for each version are in the README under
 [Upgrading](README.md#upgrading).
 
+## Unreleased
+
+### Added
+
+- Help requests have a priority and a due date. Requesters pick High (due the
+  same day), Medium (one week, the default) or Low (one month) in the widget.
+  Admins get Priority and Due columns, a priority filter, an Overdue toggle
+  and a "Set priority" action that recomputes the due date from when the
+  request was sent. Needs the new migration
+  `add_priority_to_help_requests_table`; existing requests become Medium with
+  no due date. Parley's internal help-article notes get no due date either.
+  See [Priority](README.md#priority).
+
 ## 2.2.0 - 2026-11-02
 
 ### Added

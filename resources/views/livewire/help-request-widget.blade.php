@@ -290,6 +290,26 @@
                     @enderror
                 @endif
 
+                <div role="radiogroup" aria-label="How urgent is this?" class="flex flex-wrap gap-2">
+                    @foreach ($this->priorities as $key => $label)
+                        <label wire:key="hr-priority-{{ $key }}" class="cursor-pointer">
+                            <input
+                                type="radio"
+                                name="help-request-priority"
+                                value="{{ $key }}"
+                                wire:model="priority"
+                                class="peer sr-only"
+                            />
+                            <span class="inline-flex items-center rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-sm text-gray-600 transition hover:border-gray-400 peer-checked:border-primary-600 peer-checked:bg-primary-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-1 dark:border-white/15 dark:bg-white/5 dark:text-gray-300 dark:peer-checked:border-primary-500 dark:peer-checked:bg-primary-500">
+                                {{ $label }}
+                            </span>
+                        </label>
+                    @endforeach
+                </div>
+                @error('priority')
+                    <p class="-mt-1 text-xs text-danger-600 dark:text-danger-400">{{ $message }}</p>
+                @enderror
+
                 <div>
                     <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">How can we help?</label>
                     <textarea

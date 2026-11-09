@@ -16,6 +16,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
+use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\Filament\Resources\HelpRequests\HelpRequestResource;
 use Joelseneque\HelpRequests\HelpRequests;
@@ -47,6 +48,13 @@ class ViewHelpRequest extends ViewRecord
                             ->placeholder('—'),
                         TextEntry::make('status')
                             ->badge(),
+                        TextEntry::make('priority')
+                            ->badge(),
+                        TextEntry::make('due_at')
+                            ->label('Due')
+                            ->dateTime('d M Y, g:i A')
+                            ->color(fn (HelpRequest $record): ?string => $record->isOverdue() ? 'danger' : null)
+                            ->placeholder('—'),
                         TextEntry::make('created_at')
                             ->label('Submitted')
                             ->dateTime('d M Y, g:i A'),
@@ -233,6 +241,34 @@ class ViewHelpRequest extends ViewRecord
 
                     Notification::make()
                         ->title('Status updated')
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('setPriority')
+                ->label('Set priority')
+                ->icon('heroicon-o-bolt')
+                ->color('gray')
+                ->schema([
+                    Select::make('priority')
+                        ->options(HelpRequestPriority::class)
+                        ->default(fn (HelpRequest $record): string => $record->priority->value)
+                        ->required(),
+                ])
+                ->action(function (array $data, HelpRequest $record): void {
+                    $priority = $data['priority'] instanceof HelpRequestPriority
+                        ? $data['priority']
+                        : HelpRequestPriority::from($data['priority']);
+
+                    // Counted from submission, not from now, so re-triaging
+                    // never hands an old request a fresh deadline.
+                    $record->update([
+                        'priority' => $priority,
+                        'due_at' => $priority->dueAt($record->created_at),
+                    ]);
+
+                    Notification::make()
+                        ->title('Priority updated')
                         ->success()
                         ->send();
                 }),

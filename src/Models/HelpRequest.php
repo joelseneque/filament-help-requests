@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Joelseneque\HelpRequests\Database\Factories\HelpRequestFactory;
+use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Models\Concerns\HasAttachments;
@@ -19,6 +20,8 @@ use Joelseneque\HelpRequests\Models\Concerns\HasAttachments;
  * @property string|null $page_url
  * @property string|null $page_title
  * @property string|null $category
+ * @property HelpRequestPriority $priority
+ * @property Carbon|null $due_at
  * @property bool $is_internal
  * @property int|null $parley_conversation_id
  * @property string $comment
@@ -44,6 +47,8 @@ class HelpRequest extends Model
         'page_url',
         'page_title',
         'category',
+        'priority',
+        'due_at',
         'is_internal',
         'parley_conversation_id',
         'comment',
@@ -59,12 +64,42 @@ class HelpRequest extends Model
     ];
 
     /**
+     * Medium is also the DB default; repeating it here means a freshly built
+     * model has a priority before it is saved.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'priority' => 'medium',
+    ];
+
+    /**
+     * Every creation path (widget, factories) gets a deadline without having
+     * to compute one. An explicit due_at is kept, and created_at is preferred
+     * over now() so a back-dated row is due relative to when it was raised.
+     * Internal notes (Parley's help-article gaps) get none: nobody chose a
+     * priority for them, and they would otherwise crowd the Overdue view.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $request): void {
+            if ($request->is_internal) {
+                return;
+            }
+
+            $request->due_at ??= $request->priority->dueAt($request->created_at ?? now());
+        });
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
             'status' => HelpRequestStatus::class,
+            'priority' => HelpRequestPriority::class,
+            'due_at' => 'datetime',
             'attachments' => 'array',
             'is_internal' => 'boolean',
             'resolved_at' => 'datetime',
@@ -106,6 +141,29 @@ class HelpRequest extends Model
     public function scopeRaisedByRequester(Builder $query): void
     {
         $query->where('is_internal', false);
+    }
+
+    /**
+     * Past its deadline and still waiting on the team. Requests without a
+     * due_at (created before priorities existed) are never overdue.
+     */
+    public function isOverdue(): bool
+    {
+        return $this->due_at !== null
+            && $this->due_at->isPast()
+            && ! $this->status->isFinished();
+    }
+
+    /**
+     * Query twin of isOverdue().
+     *
+     * @param  Builder<HelpRequest>  $query
+     */
+    public function scopeOverdue(Builder $query): void
+    {
+        $query->whereNotNull('due_at')
+            ->where('due_at', '<', now())
+            ->whereNotIn('status', HelpRequestStatus::finished());
     }
 
     public function categoryLabel(): ?string
