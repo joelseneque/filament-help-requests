@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
@@ -11,6 +13,12 @@ use Joelseneque\HelpRequests\Services\GitHubIssueService;
 
 beforeEach(function (): void {
     $this->settings = makeGitHubSettings(['github_default_labels' => ['help request']]);
+
+    // The org's issue-fields lookup answers with $this->issueFields: none by
+    // default, and a test that needs fields swaps the response in. Returning
+    // null lets every other request fall through to the test's own fakes.
+    $this->issueFields = Http::response(['message' => 'Not Found'], 404);
+    Http::fake(fn ($request) => str_contains($request->url(), '/issue-fields') ? $this->issueFields : null);
 
     $this->github = app(GitHubIssueService::class);
 });
@@ -122,8 +130,9 @@ it('creates a github issue and links it to the help request', function (): void 
     expect($helpRequest->github_issue_state)->toBe('open');
 
     Http::assertSent(function ($request) use ($helpRequest): bool {
-        return $request['title'] === "Help request #{$helpRequest->id}: The quote PDF will not download"
-            && $request['labels'] === ['help request', 'priority: medium']
+        return $request->method() === 'POST'
+            && $request['title'] === "Help request #{$helpRequest->id}: The quote PDF will not download"
+            && $request['labels'] === ['help request']
             && str_contains($request['body'], 'The quote PDF will not download');
     });
 });
@@ -135,7 +144,7 @@ it('creates the issue with the labels the label hook adds', function (): void {
 
     $this->github->createIssue(HelpRequest::factory()->create());
 
-    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request', 'priority: medium', 'triaged']);
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['help request', 'triaged']);
 });
 
 it('passes the request and the default labels to the label hook', function (): void {
@@ -153,7 +162,7 @@ it('passes the request and the default labels to the label hook', function (): v
 
     $this->github->createIssue($helpRequest);
 
-    expect($received)->toBe([$helpRequest->id, ['help request', 'priority: medium']]);
+    expect($received)->toBe([$helpRequest->id, ['help request']]);
 });
 
 it('trims the hook labels and drops blanks and repeats', function (): void {
@@ -163,7 +172,7 @@ it('trims the hook labels and drops blanks and repeats', function (): void {
 
     $this->github->createIssue(HelpRequest::factory()->create());
 
-    Http::assertSent(fn ($request): bool => $request['labels'] === ['bug', 'help request']);
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['bug', 'help request']);
 });
 
 it('sends no labels when the label hook returns none', function (): void {
@@ -188,7 +197,7 @@ it('still creates the issue with the default labels when the label hook throws',
 
     expect($result['ok'])->toBeTrue();
     expect($helpRequest->refresh()->github_issue_number)->toBe(42);
-    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request', 'priority: medium']);
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['help request']);
     Log::shouldHaveReceived('warning')->once()->withArgs(
         fn (string $message, array $context): bool => $context['help_request_id'] === $helpRequest->id
             && $context['error'] === 'Triage service is down',
@@ -209,11 +218,11 @@ it('retries with the default labels when github rejects the hook labels', functi
 
     expect($result['ok'])->toBeTrue();
     expect($helpRequest->refresh()->github_issue_number)->toBe(42);
-    expect(Http::recorded()->map(fn (array $pair): array => $pair[0]['labels'])->all())
-        ->toBe([['help request', 'priority: medium', 'missing-label'], ['help request']]);
+    expect(issueCreates()->map(fn ($request): array => $request['labels'])->all())
+        ->toBe([['help request', 'missing-label'], ['help request']]);
     Log::shouldHaveReceived('warning')->once()->withArgs(
         fn (string $message, array $context): bool => $context['help_request_id'] === $helpRequest->id
-            && $context['labels'] === ['help request', 'priority: medium', 'missing-label'],
+            && $context['labels'] === ['help request', 'missing-label'],
     );
 });
 
@@ -224,39 +233,97 @@ it('adds the priority and due date to the issue body', function (): void {
     $this->github->createIssue($helpRequest);
 
     $line = '**Priority:** High · due '.$helpRequest->due_at->format('d M Y').', 11:59 PM';
-    Http::assertSent(fn ($request): bool => str_contains($request['body'], $line));
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && str_contains($request['body'], $line));
 });
 
-it('labels the issue with its priority', function (): void {
-    Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
-
-    $this->github->createIssue(HelpRequest::factory()->create(['priority' => HelpRequestPriority::Low]));
-
-    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request', 'priority: low']);
-});
-
-it('leaves the priority off issues for requests without a due date', function (): void {
+it('leaves the priority and fields off issues for requests without a due date', function (): void {
     Http::fake(['api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201)]);
 
     $this->github->createIssue(HelpRequest::factory()->create(['is_internal' => true]));
 
-    Http::assertSent(fn ($request): bool => $request['labels'] === ['help request']
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['labels'] === ['help request']
+        && ! array_key_exists('issue_field_values', $request->data())
         && ! str_contains($request['body'], '**Priority:**'));
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/issue-fields'));
 });
 
-it('creates the issue with the default labels when github rejects the priority label', function (): void {
+it('sets the priority and target date fields on the new issue', function (): void {
+    Http::fake([
+        'api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201),
+    ]);
+    $this->issueFields = Http::response(fakeIssueFields());
+
+    $helpRequest = HelpRequest::factory()->create(['priority' => HelpRequestPriority::High]);
+
+    expect($this->github->createIssue($helpRequest)['ok'])->toBeTrue();
+    expect(issueCreates()->sole()['issue_field_values'])->toBe([
+        ['field_id' => 11, 'value' => 'High'],
+        ['field_id' => 12, 'value' => $helpRequest->due_at->toDateString()],
+    ]);
+});
+
+it('creates the issue without field values when the organisation has none', function (): void {
+    Http::fake([
+        'api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201),
+    ]);
+
+    expect($this->github->createIssue(HelpRequest::factory()->create())['ok'])->toBeTrue();
+    expect(issueCreates()->sole()->data())->not->toHaveKey('issue_field_values');
+});
+
+it('creates the issue without field values when the app cannot read the fields', function (): void {
+    Http::fake([
+        'api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201),
+    ]);
+    $this->issueFields = Http::response(['message' => 'Resource not accessible by integration'], 403);
+    Log::spy();
+
+    expect($this->github->createIssue(HelpRequest::factory()->create())['ok'])->toBeTrue();
+    expect(issueCreates()->sole()->data())->not->toHaveKey('issue_field_values');
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'issue fields'));
+});
+
+it('skips the priority field when it has no matching option', function (): void {
+    Http::fake([
+        'api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201),
+    ]);
+    $this->issueFields = Http::response(fakeIssueFields(['P1', 'P2']));
+
+    $helpRequest = HelpRequest::factory()->create();
+    $this->github->createIssue($helpRequest);
+
+    expect(issueCreates()->sole()['issue_field_values'])->toBe([
+        ['field_id' => 12, 'value' => $helpRequest->due_at->toDateString()],
+    ]);
+});
+
+it('looks the fields up once per organisation', function (): void {
+    Http::fake([
+        'api.github.com/repos/acme/app/issues' => Http::response(['number' => 42, 'state' => 'open'], 201),
+    ]);
+    $this->issueFields = Http::response(fakeIssueFields());
+
+    $this->github->createIssue(HelpRequest::factory()->create());
+    $this->github->createIssue(HelpRequest::factory()->create());
+
+    expect(Http::recorded()->filter(fn (array $pair): bool => str_contains($pair[0]->url(), '/issue-fields')))->toHaveCount(1)
+        ->and(issueCreates())->toHaveCount(2);
+});
+
+it('retries without field values when github rejects the issue', function (): void {
+    $this->issueFields = Http::response(fakeIssueFields());
     Http::fakeSequence('api.github.com/repos/acme/app/issues')
         ->push(['message' => 'Validation Failed'], 422)
         ->push(['number' => 42, 'state' => 'open'], 201);
 
     $helpRequest = HelpRequest::factory()->create();
 
-    $result = $this->github->createIssue($helpRequest);
-
-    expect($result['ok'])->toBeTrue()
-        ->and($helpRequest->refresh()->github_issue_number)->toBe(42)
-        ->and(Http::recorded()->map(fn (array $pair): array => $pair[0]['labels'])->all())
-        ->toBe([['help request', 'priority: medium'], ['help request']]);
+    expect($this->github->createIssue($helpRequest)['ok'])->toBeTrue()
+        ->and($helpRequest->refresh()->github_issue_number)->toBe(42);
+    [$first, $second] = issueCreates()->all();
+    expect($first->data())->toHaveKey('issue_field_values')
+        ->and($second->data())->not->toHaveKey('issue_field_values')
+        ->and($second['labels'])->toBe(['help request']);
 });
 
 it('forgets the label hook on flush', function (): void {
@@ -290,8 +357,8 @@ it('surfaces a github error when issue creation is rejected', function (): void 
     expect($result['ok'])->toBeFalse();
     expect($result['message'])->toContain('422')->toContain('Validation Failed');
     expect($helpRequest->refresh()->github_issue_number)->toBeNull();
-    // Retried once without the priority label, then gave up.
-    Http::assertSentCount(2);
+    // Nothing changed from the defaults, so there is nothing to fall back to.
+    expect(issueCreates())->toHaveCount(1);
 });
 
 it('maps issue state to a help request status', function (array $issue, HelpRequestStatus $expected): void {
@@ -457,6 +524,31 @@ it('reports a successful connection test', function (): void {
     expect($this->github->testConnection())->toMatchArray(['ok' => true]);
 });
 
+it('says when the connection test finds the priority fields', function (): void {
+    Http::fake([
+        'api.github.com/repos/*' => Http::response(['full_name' => 'acme/app', 'has_issues' => true]),
+        'api.github.com/app/installations/555' => Http::response(['permissions' => ['issues' => 'write']]),
+    ]);
+    $this->issueFields = Http::response(fakeIssueFields());
+
+    $result = $this->github->testConnection();
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['message'])->toContain('Priority and Target date fields: found.');
+});
+
+it('says when the connection test cannot find the priority fields', function (): void {
+    Http::fake([
+        'api.github.com/repos/*' => Http::response(['full_name' => 'acme/app', 'has_issues' => true]),
+        'api.github.com/app/installations/555' => Http::response(['permissions' => ['issues' => 'write']]),
+    ]);
+
+    $result = $this->github->testConnection();
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['message'])->toContain('Priority and Target date fields: not available');
+});
+
 it('tells the user to install the app before testing', function (): void {
     Http::fake();
 
@@ -536,3 +628,16 @@ it('does nothing on github when the priority is unchanged or there is no issue',
 
     Http::assertNothingSent();
 });
+
+/**
+ * The create-issue requests sent, leaving out the issue-fields lookup.
+ *
+ * @return Collection<int, Request>
+ */
+function issueCreates(): Collection
+{
+    return Http::recorded()
+        ->map(fn (array $pair) => $pair[0])
+        ->filter(fn ($request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/repos/acme/app/issues'))
+        ->values();
+}
