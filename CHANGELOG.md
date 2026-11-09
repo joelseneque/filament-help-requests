@@ -16,6 +16,10 @@ Upgrade steps for each version are in the README under
   receives the priority label with the defaults and can drop it; if GitHub
   rejects it, the issue is created with only the default labels. See
   [Labels per issue](README.md#labels-per-issue).
+- Changing the priority of a request that has a GitHub issue posts a comment
+  on the issue ("Priority changed from Medium to Low · due …") and swaps the
+  priority label. If GitHub can't be reached, the new priority is kept and
+  the admin sees a warning.
 
 ## 2.3.0 - 2026-11-09
 

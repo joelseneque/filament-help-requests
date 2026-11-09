@@ -429,8 +429,9 @@ that reacts to a new issue sees them straight away.
 Requests can be raised as issues in a GitHub repository, either
 automatically or with a button on each request. The issue shows the
 request's priority and due date, and gets a priority label (see
-[Labels per issue](#labels-per-issue)). Replies written in the app
-are posted to the issue. Closing an issue marks the request **Resolved**,
+[Labels per issue](#labels-per-issue)). Changing the priority later
+("Set priority") comments on the issue and swaps the label; the issue body
+is left as it was. Replies written in the app are posted to the issue. Closing an issue marks the request **Resolved**,
 closing it as *not planned* marks it **Closed**, and reopening it marks it
 **Open**. Comments made on the issue stay in GitHub — they are not shown to
 the requester.

@@ -479,3 +479,60 @@ it('tells the user to pick a repository once installed', function (): void {
     expect($result['ok'])->toBeFalse();
     expect($result['message'])->toContain('no repository has been selected');
 });
+
+it('comments on the issue and swaps the label when the priority changes', function (): void {
+    Http::fake(['api.github.com/*' => Http::response(['id' => 1])]);
+
+    $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::Low]);
+    $helpRequest->update(['due_at' => '2026-12-09 10:00']);
+
+    $result = $this->github->pushPriority($helpRequest, HelpRequestPriority::Medium);
+
+    expect($result['ok'])->toBeTrue();
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/app/issues/42/comments')
+        && $request['body'] === 'Priority changed from Medium to Low in '.HelpRequests::appName().' · due 09 Dec 2026, 10:00 AM');
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with($request->url(), '/repos/acme/app/issues/42/labels/priority%3A%20medium'));
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/app/issues/42/labels')
+        && $request['labels'] === ['priority: low']);
+});
+
+it('still adds the new priority label when the old one is already gone', function (): void {
+    Http::fake(fn ($request) => $request->method() === 'DELETE'
+        ? Http::response(['message' => 'Label does not exist'], 404)
+        : Http::response(['id' => 1]));
+
+    $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
+
+    $result = $this->github->pushPriority($helpRequest, HelpRequestPriority::Medium);
+
+    expect($result['ok'])->toBeTrue();
+    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/issues/42/labels')
+        && $request['labels'] === ['priority: high']);
+});
+
+it('reports when github rejects the priority comment', function (): void {
+    Http::fake(['api.github.com/*' => Http::response(['message' => 'Server Error'], 500)]);
+
+    $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
+
+    $result = $this->github->pushPriority($helpRequest, HelpRequestPriority::Medium);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['message'])->toStartWith('GitHub returned 500');
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/labels'));
+});
+
+it('does nothing on github when the priority is unchanged or there is no issue', function (): void {
+    Http::fake();
+
+    $linked = HelpRequest::factory()->linkedToIssue()->create();
+    $unlinked = HelpRequest::factory()->create(['priority' => HelpRequestPriority::High]);
+
+    $this->github->pushPriority($linked, HelpRequestPriority::Medium);
+    $this->github->pushPriority($unlinked, HelpRequestPriority::Medium);
+
+    Http::assertNothingSent();
+});

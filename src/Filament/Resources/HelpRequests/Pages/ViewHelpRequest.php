@@ -260,6 +260,8 @@ class ViewHelpRequest extends ViewRecord
                         ? $data['priority']
                         : HelpRequestPriority::from($data['priority']);
 
+                    $previous = $record->priority;
+
                     // Counted from submission, not from now, so re-triaging
                     // never hands an old request a fresh deadline.
                     $record->update([
@@ -271,6 +273,18 @@ class ViewHelpRequest extends ViewRecord
                         ->title('Priority updated')
                         ->success()
                         ->send();
+
+                    if ($record->hasGithubIssue()) {
+                        $result = app(GitHubIssueService::class)->pushPriority($record, $previous);
+
+                        if (! $result['ok']) {
+                            Notification::make()
+                                ->title('GitHub was not updated')
+                                ->body($result['message'])
+                                ->warning()
+                                ->send();
+                        }
+                    }
                 }),
 
             Action::make('createGithubIssue')
