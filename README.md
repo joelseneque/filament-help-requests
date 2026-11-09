@@ -137,6 +137,21 @@ HelpRequestsPlugin::make()
 Pass `->categories([])` to hide the buttons. A closure is also accepted if
 the list depends on something at runtime.
 
+### Priority
+
+Every request carries a priority, which sets its due date:
+
+| Priority | Due |
+| --- | --- |
+| High | the same day |
+| Medium | one week after it is raised |
+| Low | one month after it is raised |
+
+Requesters pick one in the widget; Medium is preselected. Admins can change
+the priority afterwards. "Same day" means the end of the day in your app's
+`app.timezone` setting, so an app left on UTC puts the deadline mid-morning
+the next day for a team in Australia.
+
 Categories are stored by key, so relabelling one keeps old requests
 correct. A key you later remove still shows a readable label on old
 requests. The category appears in the admin list (with a filter), on the

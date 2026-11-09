@@ -96,7 +96,7 @@ it('hides the category choice when given an empty list', function () {
     $this->actingAs(User::factory()->create());
 
     Livewire::test(HelpRequestWidget::class)
-        ->assertDontSee('radiogroup', escape: false)
+        ->assertDontSee('What kind of feedback is this?')
         ->assertDontSee('This works well');
 });
 

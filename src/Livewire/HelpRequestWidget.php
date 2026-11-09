@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Joelseneque\HelpRequests\Enums\HelpRequestPriority;
 use Joelseneque\HelpRequests\Enums\HelpRequestStatus;
 use Joelseneque\HelpRequests\HelpRequests;
 use Joelseneque\HelpRequests\Jobs\CreateGitHubIssueForHelpRequest;
@@ -60,6 +61,12 @@ class HelpRequestWidget extends Component
     public string $pageTitle = '';
 
     public string $category = '';
+
+    /**
+     * Medium is preselected so a requester who ignores the picker still gets
+     * the middle-of-the-road deadline rather than none.
+     */
+    public string $priority = 'medium';
 
     public string $videoUrl = '';
 
@@ -142,6 +149,7 @@ class HelpRequestWidget extends Component
             'comment' => ['required', 'string', 'min:3', 'max:5000'],
             ...$this->screenshotRules('screenshots', 'screenshotNotes'),
             'category' => ['nullable', 'string', Rule::in(array_keys(HelpRequests::categories()))],
+            'priority' => ['required', Rule::enum(HelpRequestPriority::class)],
             'videoUrl' => [
                 'nullable',
                 'url:https',
@@ -263,6 +271,7 @@ class HelpRequestWidget extends Component
             'page_url' => $this->pageUrl !== '' ? $this->pageUrl : null,
             'page_title' => $this->pageTitle !== '' ? $this->pageTitle : null,
             'category' => $this->category !== '' ? $this->category : null,
+            'priority' => $this->priority,
             'parley_conversation_id' => $this->ownConversation($this->requestConversationId)?->getKey(),
             'video_url' => HelpRequests::videoLinksEnabled() && trim($this->videoUrl) !== '' ? trim($this->videoUrl) : null,
             'comment' => $this->withMarkerNotes($this->comment, $this->screenshots, $this->screenshotNotes),
@@ -276,7 +285,7 @@ class HelpRequestWidget extends Component
             CreateGitHubIssueForHelpRequest::dispatch($helpRequest);
         }
 
-        $this->reset('comment', 'screenshots', 'screenshotNotes', 'category', 'videoUrl', 'requestConversationId');
+        $this->reset('comment', 'screenshots', 'screenshotNotes', 'category', 'priority', 'videoUrl', 'requestConversationId');
         $this->tab = 'mine';
 
         unset($this->myRequests);
@@ -707,6 +716,19 @@ class HelpRequestWidget extends Component
     public function categories(): array
     {
         return HelpRequests::categories();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function priorities(): array
+    {
+        return collect(HelpRequestPriority::cases())
+            ->mapWithKeys(fn (HelpRequestPriority $priority): array => [
+                $priority->value => $priority->getLabel().' — '.$priority->timeframe(),
+            ])
+            ->all();
     }
 
     public function render(): View
