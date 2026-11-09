@@ -555,7 +555,7 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
-**Unreleased**
+**2.5.0**
 
 - GitHub issues set the organisation's **Priority** and **Target date**
   fields instead of a `priority: …` label (see

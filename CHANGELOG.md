@@ -6,7 +6,7 @@ dates match the releases on
 Upgrade steps for each version are in the README under
 [Upgrading](README.md#upgrading).
 
-## Unreleased
+## 2.5.0 - 2026-11-09
 
 ### Changed
 
