@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -611,6 +612,20 @@ it('keeps the comment when the field update fails', function (): void {
     $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
 
     expect($this->github->pushPriority($helpRequest, HelpRequestPriority::Medium)['ok'])->toBeTrue();
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'GitHub issue field update failed');
+});
+
+it('keeps the comment when the field update cannot reach github', function (): void {
+    Http::fake(fn ($request) => str_contains($request->url(), '/issue-field-values')
+        ? throw new ConnectionException('Timed out')
+        : Http::response(['id' => 1]));
+    $this->issueFields = Http::response(fakeIssueFields());
+    Log::spy();
+
+    $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
+
+    expect($this->github->pushPriority($helpRequest, HelpRequestPriority::Medium)['ok'])->toBeTrue()
+        ->and($helpRequest->refresh()->github_synced_at)->not->toBeNull();
     Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'GitHub issue field update failed');
 });
 

@@ -499,14 +499,18 @@ class GitHubIssueService
             $fieldValues = $response->successful() ? $this->issueFieldValues($helpRequest, $repository) : [];
 
             if ($fieldValues !== []) {
-                $fields = $this->client($settings)->post("{$issue}/issue-field-values", ['issue_field_values' => $fieldValues]);
+                // Its own try: the comment is already posted, so a failure here
+                // must not report the re-triage as failed (a retry would post
+                // the comment twice).
+                try {
+                    $fields = $this->client($settings)->post("{$issue}/issue-field-values", ['issue_field_values' => $fieldValues]);
+                    $fieldError = $fields->failed() ? ['status' => $fields->status(), 'body' => $fields->json()] : null;
+                } catch (\Throwable $e) {
+                    $fieldError = ['error' => $e->getMessage()];
+                }
 
-                if ($fields->failed()) {
-                    Log::warning('GitHub issue field update failed', [
-                        'help_request_id' => $helpRequest->id,
-                        'status' => $fields->status(),
-                        'body' => $fields->json(),
-                    ]);
+                if ($fieldError !== null) {
+                    Log::warning('GitHub issue field update failed', ['help_request_id' => $helpRequest->id, ...$fieldError]);
                 }
             }
         } catch (\Throwable $e) {

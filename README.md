@@ -555,6 +555,19 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
+**Unreleased**
+
+- GitHub issues set the organisation's **Priority** and **Target date**
+  fields instead of a `priority: …` label (see
+  [Priority and Target date](#priority-and-target-date)). In the GitHub App,
+  add **Organization permissions → Issue fields: Read-only** and accept it
+  on each installation, then run **Test connection**.
+- `labelsUsing()` hooks no longer receive a priority label in `$defaults`.
+- The `priority: high|medium|low` labels are no longer used. Issues created
+  under 2.4.0 keep theirs, and re-triage no longer changes it, so remove them
+  from those issues (or delete the labels) to avoid two priorities. No
+  migrations, config or view changes.
+
 **2.4.0**
 
 - GitHub issues show the request's priority and due date and get a
