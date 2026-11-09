@@ -185,7 +185,15 @@ class GitHubIssueService
 
         $repository = $settings->githubRepository();
         $defaults = $settings->github_default_labels ?? [];
-        $labels = HelpRequests::issueLabels($helpRequest, $defaults);
+
+        // The priority label rides with the defaults so the hook can drop it,
+        // but the 422 retry below falls back to the saved defaults alone: a
+        // repository without the priority labels still gets its issue.
+        // Requests without a due date (internal notes) had no priority chosen.
+        $labels = HelpRequests::issueLabels($helpRequest, array_values(array_unique([
+            ...$defaults,
+            ...($helpRequest->due_at ? [$helpRequest->priority->githubLabel()] : []),
+        ])));
 
         $payload = array_filter([
             'title' => $this->issueTitle($helpRequest),
@@ -472,6 +480,10 @@ class GitHubIssueService
 
         if ($category = $helpRequest->categoryLabel()) {
             $lines[] = "**Type:** {$category}";
+        }
+
+        if ($helpRequest->due_at) {
+            $lines[] = "**Priority:** {$helpRequest->priority->getLabel()} · due {$helpRequest->due_at->format('d M Y, g:i A')}";
         }
 
         if ($helpRequest->page_title || $helpRequest->page_url) {

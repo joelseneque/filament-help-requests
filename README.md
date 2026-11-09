@@ -387,8 +387,14 @@ in one panel and the help button in another.
 
 ### Labels per issue
 
-New GitHub issues get the **Default labels** from the settings page. To
-choose labels per request, register a hook in a service provider's `boot()`
+New GitHub issues get the **Default labels** from the settings page, plus a
+priority label: `priority: high`, `priority: medium` or `priority: low`
+(see [Priority](#priority)). Requests without a due date, such as Parley's
+internal notes, get no priority label. Create the three priority labels in
+the repository; if GitHub rejects them, the issue is created with only the
+default labels.
+
+To choose labels per request, register a hook in a service provider's `boot()`
 method, so queue workers have it too:
 
 ```php
@@ -401,8 +407,8 @@ HelpRequests::labelsUsing(fn (HelpRequest $request, array $defaults): array => [
 ]);
 ```
 
-The closure gets the request and the default labels and returns the full
-list. The labels are sent in the request that creates the issue, so anything
+The closure gets the request and the default labels (including the
+priority label, which it can drop) and returns the full list. The labels are sent in the request that creates the issue, so anything
 that reacts to a new issue sees them straight away.
 
 - The closure runs when the issue is created: usually in the queued
@@ -421,7 +427,9 @@ that reacts to a new issue sees them straight away.
 ## GitHub integration (optional)
 
 Requests can be raised as issues in a GitHub repository, either
-automatically or with a button on each request. Replies written in the app
+automatically or with a button on each request. The issue shows the
+request's priority and due date, and gets a priority label (see
+[Labels per issue](#labels-per-issue)). Replies written in the app
 are posted to the issue. Closing an issue marks the request **Resolved**,
 closing it as *not planned* marks it **Closed**, and reopening it marks it
 **Open**. Comments made on the issue stay in GitHub — they are not shown to
