@@ -543,6 +543,14 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
+**2.4.0**
+
+- GitHub issues show the request's priority and due date and get a
+  `priority: high|medium|low` label (see [Labels per issue](#labels-per-issue)).
+  Create those three labels in each connected repository. A `labelsUsing()`
+  hook now receives the priority label in `$defaults`. No migrations, config
+  or view changes.
+
 **2.3.0**
 
 - Help requests have a priority (High, Medium, Low) and a due date (see
