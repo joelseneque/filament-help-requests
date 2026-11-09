@@ -470,9 +470,9 @@ class GitHubIssueService
 
     /**
      * Tell the linked issue an admin re-triaged the request: a comment, and
-     * the priority label swapped. The body is left alone so edits made on
-     * GitHub survive. The label swap is best-effort, since the comment
-     * already carries the news.
+     * the Priority and Target date fields updated. The body is left alone so
+     * edits made on GitHub survive. The field update is best-effort, since
+     * the comment already carries the news.
      *
      * @return array{ok: bool, message: string}
      */
@@ -488,23 +488,24 @@ class GitHubIssueService
             return ['ok' => true, 'message' => 'GitHub is already up to date.'];
         }
 
-        $issue = '/repos/'.($helpRequest->github_repository ?: $settings->githubRepository())."/issues/{$helpRequest->github_issue_number}";
+        $repository = $helpRequest->github_repository ?: $settings->githubRepository();
+        $issue = "/repos/{$repository}/issues/{$helpRequest->github_issue_number}";
         $body = "Priority changed from {$previous->getLabel()} to {$helpRequest->priority->getLabel()} in "
             .HelpRequests::appName().' · due '.$helpRequest->due_at->format('d M Y, g:i A');
 
         try {
             $response = $this->client($settings)->post("{$issue}/comments", ['body' => $body]);
 
-            if ($response->successful()) {
-                $removed = $this->client($settings)->delete("{$issue}/labels/".rawurlencode($previous->githubLabel()));
-                $added = $this->client($settings)->post("{$issue}/labels", ['labels' => [$helpRequest->priority->githubLabel()]]);
+            $fieldValues = $response->successful() ? $this->issueFieldValues($helpRequest, $repository) : [];
 
-                // A 404 means the old label was already gone, which is fine.
-                if (($removed->failed() && $removed->status() !== 404) || $added->failed()) {
-                    Log::warning('GitHub priority label swap failed', [
+            if ($fieldValues !== []) {
+                $fields = $this->client($settings)->post("{$issue}/issue-field-values", ['issue_field_values' => $fieldValues]);
+
+                if ($fields->failed()) {
+                    Log::warning('GitHub issue field update failed', [
                         'help_request_id' => $helpRequest->id,
-                        'removed_status' => $removed->status(),
-                        'added_status' => $added->status(),
+                        'status' => $fields->status(),
+                        'body' => $fields->json(),
                     ]);
                 }
             }

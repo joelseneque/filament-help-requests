@@ -572,8 +572,9 @@ it('tells the user to pick a repository once installed', function (): void {
     expect($result['message'])->toContain('no repository has been selected');
 });
 
-it('comments on the issue and swaps the label when the priority changes', function (): void {
+it('comments on the issue and updates its fields when the priority changes', function (): void {
     Http::fake(['api.github.com/*' => Http::response(['id' => 1])]);
+    $this->issueFields = Http::response(fakeIssueFields());
 
     $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::Low]);
     $helpRequest->update(['due_at' => '2026-12-09 10:00']);
@@ -584,25 +585,33 @@ it('comments on the issue and swaps the label when the priority changes', functi
     Http::assertSent(fn ($request): bool => $request->method() === 'POST'
         && str_ends_with($request->url(), '/repos/acme/app/issues/42/comments')
         && $request['body'] === 'Priority changed from Medium to Low in '.HelpRequests::appName().' · due 09 Dec 2026, 10:00 AM');
-    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
-        && str_ends_with($request->url(), '/repos/acme/app/issues/42/labels/priority%3A%20medium'));
     Http::assertSent(fn ($request): bool => $request->method() === 'POST'
-        && str_ends_with($request->url(), '/repos/acme/app/issues/42/labels')
-        && $request['labels'] === ['priority: low']);
+        && str_ends_with($request->url(), '/repos/acme/app/issues/42/issue-field-values')
+        && $request['issue_field_values'] === [['field_id' => 11, 'value' => 'Low'], ['field_id' => 12, 'value' => '2026-12-09']]);
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/labels'));
 });
 
-it('still adds the new priority label when the old one is already gone', function (): void {
-    Http::fake(fn ($request) => $request->method() === 'DELETE'
-        ? Http::response(['message' => 'Label does not exist'], 404)
-        : Http::response(['id' => 1]));
+it('only comments when the organisation has no issue fields', function (): void {
+    Http::fake(['api.github.com/*' => Http::response(['id' => 1])]);
 
     $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
 
-    $result = $this->github->pushPriority($helpRequest, HelpRequestPriority::Medium);
+    expect($this->github->pushPriority($helpRequest, HelpRequestPriority::Medium)['ok'])->toBeTrue();
+    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/issues/42/comments'));
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/issue-field-values'));
+});
 
-    expect($result['ok'])->toBeTrue();
-    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/issues/42/labels')
-        && $request['labels'] === ['priority: high']);
+it('keeps the comment when the field update fails', function (): void {
+    Http::fake(fn ($request) => str_contains($request->url(), '/issue-field-values')
+        ? Http::response(['message' => 'Resource not accessible by integration'], 403)
+        : Http::response(['id' => 1]));
+    $this->issueFields = Http::response(fakeIssueFields());
+    Log::spy();
+
+    $helpRequest = HelpRequest::factory()->linkedToIssue()->create(['priority' => HelpRequestPriority::High]);
+
+    expect($this->github->pushPriority($helpRequest, HelpRequestPriority::Medium)['ok'])->toBeTrue();
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'GitHub issue field update failed');
 });
 
 it('reports when github rejects the priority comment', function (): void {
@@ -614,7 +623,7 @@ it('reports when github rejects the priority comment', function (): void {
 
     expect($result['ok'])->toBeFalse()
         ->and($result['message'])->toStartWith('GitHub returned 500');
-    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/labels'));
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/issue-field-values'));
 });
 
 it('does nothing on github when the priority is unchanged or there is no issue', function (): void {

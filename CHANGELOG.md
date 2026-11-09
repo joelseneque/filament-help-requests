@@ -6,6 +6,19 @@ dates match the releases on
 Upgrade steps for each version are in the README under
 [Upgrading](README.md#upgrading).
 
+## Unreleased
+
+### Changed
+
+- GitHub issues set the organisation's **Priority** and **Target date**
+  issue fields instead of a `priority: high|medium|low` label, both when the
+  issue is created and when the priority changes. The app needs the
+  **Issue fields: Read-only** organisation permission; without it, or on a
+  repository owned by a personal account, issues get the body line only.
+  `labelsUsing()` hooks no longer receive a priority label. **Test
+  connection** says whether the fields were found. See
+  [Priority and Target date](README.md#priority-and-target-date).
+
 ## 2.4.0 - 2026-11-09
 
 ### Added

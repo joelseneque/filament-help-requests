@@ -387,14 +387,8 @@ in one panel and the help button in another.
 
 ### Labels per issue
 
-New GitHub issues get the **Default labels** from the settings page, plus a
-priority label: `priority: high`, `priority: medium` or `priority: low`
-(see [Priority](#priority)). Requests without a due date, such as Parley's
-internal notes, get no priority label. Create the three priority labels in
-the repository; if GitHub rejects them, the issue is created with only the
-default labels.
-
-To choose labels per request, register a hook in a service provider's `boot()`
+New GitHub issues get the **Default labels** from the settings page. To
+choose labels per request, register a hook in a service provider's `boot()`
 method, so queue workers have it too:
 
 ```php
@@ -407,8 +401,8 @@ HelpRequests::labelsUsing(fn (HelpRequest $request, array $defaults): array => [
 ]);
 ```
 
-The closure gets the request and the default labels (including the
-priority label, which it can drop) and returns the full list. The labels are sent in the request that creates the issue, so anything
+The closure gets the request and the default labels and returns the full
+list. The labels are sent in the request that creates the issue, so anything
 that reacts to a new issue sees them straight away.
 
 - The closure runs when the issue is created: usually in the queued
@@ -427,14 +421,30 @@ that reacts to a new issue sees them straight away.
 ## GitHub integration (optional)
 
 Requests can be raised as issues in a GitHub repository, either
-automatically or with a button on each request. The issue shows the
-request's priority and due date, and gets a priority label (see
-[Labels per issue](#labels-per-issue)). Changing the priority later
-("Set priority") comments on the issue and swaps the label; the issue body
-is left as it was. Replies written in the app are posted to the issue. Closing an issue marks the request **Resolved**,
+automatically or with a button on each request. Replies written in the app
+are posted to the issue. Closing an issue marks the request **Resolved**,
 closing it as *not planned* marks it **Closed**, and reopening it marks it
 **Open**. Comments made on the issue stay in GitHub — they are not shown to
 the requester.
+
+### Priority and Target date
+
+Issues show the request's priority and due date in the body
+(**Priority:** High · due …), and set GitHub's default **Priority** and
+**Target date** [issue fields](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-and-managing-issue-fields):
+Priority to High, Medium or Low, Target date to the due date. Changing the
+priority later ("Set priority") comments on the issue and updates both
+fields; the body is left as it was.
+
+- The fields belong to the organisation, so the app needs **Issue fields:
+  Read-only** under organisation permissions, accepted on each installation.
+  **Test connection** on the settings page says whether it found them.
+- The fields are matched by name. A field that was renamed or deleted, or a
+  Priority without a High, Medium or Low option, is skipped.
+- Repositories owned by a personal account have no issue fields; their
+  issues get the body line only.
+- Requests without a due date (Parley's internal notes, requests from
+  before 2.3.0) get neither the line nor the fields.
 
 ### Create a GitHub App for each site
 
@@ -448,6 +458,8 @@ In GitHub: **Settings → Developer settings → GitHub Apps → New GitHub App*
 - **Webhook URL:** `https://your-app.test/webhooks/github`
 - **Webhook secret:** any random string
 - **Repository permissions → Issues:** Read and write
+- **Organization permissions → Issue fields:** Read-only (for
+  [Priority and Target date](#priority-and-target-date))
 - **Subscribe to events:** Issues, Installation
 
 Generate a private key, then add to `.env`:
