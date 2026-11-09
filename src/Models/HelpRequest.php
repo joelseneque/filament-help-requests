@@ -74,13 +74,19 @@ class HelpRequest extends Model
     ];
 
     /**
-     * Every creation path (widget, Parley, factories) gets a deadline without
-     * having to compute one. An explicit due_at is kept, and created_at is
-     * preferred over now() so a back-dated row is due relative to when it was raised.
+     * Every creation path (widget, factories) gets a deadline without having
+     * to compute one. An explicit due_at is kept, and created_at is preferred
+     * over now() so a back-dated row is due relative to when it was raised.
+     * Internal notes (Parley's help-article gaps) get none: nobody chose a
+     * priority for them, and they would otherwise crowd the Overdue view.
      */
     protected static function booted(): void
     {
         static::creating(function (self $request): void {
+            if ($request->is_internal) {
+                return;
+            }
+
             $request->due_at ??= $request->priority->dueAt($request->created_at ?? now());
         });
     }
@@ -157,7 +163,7 @@ class HelpRequest extends Model
     {
         $query->whereNotNull('due_at')
             ->where('due_at', '<', now())
-            ->whereNotIn('status', [HelpRequestStatus::Resolved, HelpRequestStatus::Closed]);
+            ->whereNotIn('status', HelpRequestStatus::finished());
     }
 
     public function categoryLabel(): ?string

@@ -156,7 +156,13 @@ Requesters pick one in the widget; Medium is preselected. Admins can change
 the priority afterwards ("Set priority" on the request page); the due date is
 always counted from when the request was raised. The admin list shows
 Priority and Due columns (overdue dates in red), with a Priority filter and
-an **Overdue** toggle for open requests past their due date.
+an **Overdue** toggle for open requests past their due date. Sorting by Due
+puts requests without a due date last.
+
+Two kinds of request have no due date and never show as overdue: requests
+from before priorities existed, and Parley's internal notes about missing
+help articles, since nobody chose a priority for them. Setting a priority on
+one gives it a due date.
 
 "Same day" means the end of the day in your app's `app.timezone` setting, so
 an app left on UTC puts the deadline mid-morning the next day for a team in

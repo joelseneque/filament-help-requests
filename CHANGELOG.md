@@ -16,7 +16,8 @@ Upgrade steps for each version are in the README under
   and a "Set priority" action that recomputes the due date from when the
   request was sent. Needs the new migration
   `add_priority_to_help_requests_table`; existing requests become Medium with
-  no due date. See [Priority](README.md#priority).
+  no due date. Parley's internal help-article notes get no due date either.
+  See [Priority](README.md#priority).
 
 ## 2.2.0 - 2026-11-02
 

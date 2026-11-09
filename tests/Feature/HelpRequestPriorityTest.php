@@ -166,3 +166,31 @@ it('shows priority and due date on the request page', function () {
     Livewire::test(ViewHelpRequest::class, ['record' => $request->getKey()])
         ->assertSee(['High', $request->due_at->format('d M Y, g:i A')]);
 });
+
+it('gives no due date to internal notes nobody prioritised', function () {
+    $note = HelpRequest::factory()->create(['is_internal' => true]);
+
+    expect($note->due_at)->toBeNull()
+        ->and($note->isOverdue())->toBeFalse();
+});
+
+it('sorts requests without a due date after dated ones, either way', function () {
+    $this->actingAs(User::factory()->create());
+
+    $undated = HelpRequest::factory()->create();
+    $undated->forceFill(['due_at' => null])->save();
+    $soon = HelpRequest::factory()->create(['due_at' => now()->addDay()]);
+    $later = HelpRequest::factory()->create(['due_at' => now()->addWeek()]);
+
+    Livewire::test(ListHelpRequests::class)
+        ->sortTable('due_at')
+        ->assertCanSeeTableRecords([$soon, $later, $undated], inOrder: true)
+        ->sortTable('due_at', 'desc')
+        ->assertCanSeeTableRecords([$later, $soon, $undated], inOrder: true);
+});
+
+it('agrees with the overdue scope on which statuses are finished', function () {
+    expect(HelpRequestStatus::finished())->toBe(
+        array_values(array_filter(HelpRequestStatus::cases(), fn (HelpRequestStatus $status): bool => $status->isFinished())),
+    );
+});

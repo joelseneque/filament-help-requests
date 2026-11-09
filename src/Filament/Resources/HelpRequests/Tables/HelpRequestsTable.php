@@ -74,7 +74,11 @@ class HelpRequestsTable
                     ->dateTime('d M Y, g:i A')
                     ->placeholder('—')
                     ->color(fn (HelpRequest $record): ?string => $record->isOverdue() ? 'danger' : null)
-                    ->sortable(),
+                    // Undated requests (from before priorities) go last both ways;
+                    // MySQL and SQLite would otherwise list them first ascending.
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderByRaw('due_at is null')
+                        ->orderBy('due_at', $direction)),
                 TextColumn::make('github_issue_number')
                     ->label('GitHub')
                     ->formatStateUsing(fn (?int $state): string => $state ? "#{$state}" : '—')

@@ -32,8 +32,19 @@ enum HelpRequestStatus: string implements HasColor, HasLabel
         };
     }
 
+    /**
+     * The statuses that end a request. One list, so the overdue filter's
+     * query and the row's red highlight can never disagree.
+     *
+     * @return list<self>
+     */
+    public static function finished(): array
+    {
+        return [self::Resolved, self::Closed];
+    }
+
     public function isFinished(): bool
     {
-        return in_array($this, [self::Resolved, self::Closed], true);
+        return in_array($this, self::finished(), true);
     }
 }
