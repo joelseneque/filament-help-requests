@@ -534,9 +534,13 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
-**Unreleased**
+**2.3.0**
 
-- New migration `add_priority_to_help_requests_table` (publish and run it, step 2). Existing requests become Medium with no due date.
+- Help requests have a priority (High, Medium, Low) and a due date (see
+  [Priority](#priority)). New migration `add_priority_to_help_requests_table`
+  (step 2); existing requests become Medium with no due date. If you
+  override the widget view, add the new priority buttons (step 4). No config
+  changes.
 
 **2.2.0**
 
