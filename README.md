@@ -508,6 +508,10 @@ Follow these steps in each app that uses the package.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
+**Unreleased**
+
+- New migration `add_priority_to_help_requests_table` (publish and run it, step 2). Existing requests become Medium with no due date.
+
 **2.2.0**
 
 - New `HelpRequests::labelsUsing()` hook to choose GitHub issue labels per
